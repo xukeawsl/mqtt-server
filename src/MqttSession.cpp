@@ -1105,7 +1105,8 @@ asio::awaitable<MQTT_RC_CODE> MqttSession::handle_connect() {
 
     // MS_ 前缀用于自动生成的 client_id, 客户端生成的不能带有 MS_ 前缀
     if (client_id.starts_with("MS_")) {
-        rc = co_await send_connack(0x00, MQTT_CONNACK::REFUSED_IDENTIFIER_REJECTED);
+        rc = co_await send_connack(0x00,
+                                   MQTT_CONNACK::REFUSED_IDENTIFIER_REJECTED);
         if (rc != MQTT_RC_CODE::ERR_SUCCESS) {
             co_return rc;
         }
