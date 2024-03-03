@@ -1554,8 +1554,6 @@ asio::awaitable<MQTT_RC_CODE> MqttSession::handle_pingreq() {
 }
 
 asio::awaitable<MQTT_RC_CODE> MqttSession::handle_disconnect() {
-    SPDLOG_INFO("start to handle `DISCONNECT`");
-
     MQTT_RC_CODE rc = MQTT_RC_CODE::ERR_SUCCESS_DISCONNECT;
 
     disconnect();
@@ -1563,7 +1561,6 @@ asio::awaitable<MQTT_RC_CODE> MqttSession::handle_disconnect() {
     // 删除会话关联的遗嘱消息
     session_state.will_topic = mqtt_packet_t{};
 
-    SPDLOG_INFO("success to handle `DISCONNECT`");
     co_return rc;
 }
 
