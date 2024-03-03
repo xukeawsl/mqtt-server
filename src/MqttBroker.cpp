@@ -55,3 +55,13 @@ void MqttBroker::get_retain(std::shared_ptr<MqttSession> session,
 void MqttBroker::remove_retain(const std::string& topic_name) {
     retain_map.erase(topic_name);
 }
+
+std::string MqttBroker::gen_session_id() {
+    std::string sid;
+    do {
+        sid = "MS_" + std::to_string(gen_sid_counter);
+        gen_sid_counter++;
+    } while (session_map.count(sid));
+
+    return sid;
+}

@@ -19,7 +19,10 @@ public:
 
     void remove_retain(const std::string& topic_name);
 
+    std::string gen_session_id();
+
 private:
+    uint32_t gen_sid_counter;
     std::unordered_map<std::string, mqtt_packet_t> retain_map;
     std::unordered_map<std::string, std::shared_ptr<MqttSession>> session_map;
 };

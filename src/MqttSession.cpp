@@ -159,6 +159,10 @@ void MqttSession::handle_error_code() {
             SPDLOG_ERROR("Wrong mqtt username/password");
             break;
         }
+        case MQTT_RC_CODE::ERR_BAD_CLIENT_ID: {
+            SPDLOG_ERROR("Wrong mqtt client id");
+            break;
+        }
         default: {
         }
     }
@@ -1098,14 +1102,28 @@ asio::awaitable<MQTT_RC_CODE> MqttSession::handle_connect() {
         co_return rc;
     }
 
-    if (client_id.empty()) {
-        // 暂不支持 client_id 为空, 后续可以支持为无需保留会话的生成 client_id
-        rc = co_await send_connack(0x00,
-                                   MQTT_CONNACK::REFUSED_IDENTIFIER_REJECTED);
+    // MS_ 前缀用于自动生成的 client_id, 客户端生成的不能带有 MS_ 前缀
+    if (client_id.starts_with("MS_")) {
+        rc = co_await send_connack(0x00, MQTT_CONNACK::REFUSED_NOT_AUTHORIZED);
         if (rc != MQTT_RC_CODE::ERR_SUCCESS) {
             co_return rc;
         }
-        co_return MQTT_RC_CODE::ERR_NOT_SUPPORTED;
+        co_return MQTT_RC_CODE::ERR_BAD_CLIENT_ID;
+    }
+
+    if (client_id.empty()) {
+        // 不能保留会话
+        if (clean_session == false) {
+            rc = co_await send_connack(
+                0x00, MQTT_CONNACK::REFUSED_IDENTIFIER_REJECTED);
+            if (rc != MQTT_RC_CODE::ERR_SUCCESS) {
+                co_return rc;
+            }
+            co_return MQTT_RC_CODE::ERR_PROTOCOL;
+        }
+
+        // 服务端生成一个 cliend_id
+        client_id = this->broker.gen_session_id();
     }
 
     // 读取遗嘱消息
