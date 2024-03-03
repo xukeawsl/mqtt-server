@@ -28,6 +28,17 @@ server:
     # 是否开启用户名/密码认证 (默认关闭)
     auth: false
 
+    # 用户名/密码对, 只有 auth 开启程序才会读取
+    # 用户名不可重复, 重复了后面的会覆盖前面的
+    credentials:
+      - username: 'key1'
+        password: 'value1'
+      - username: 'key2'
+        password: 'value2'
+      # 用户名密码可以为空字符串
+      # - username: ''
+      #   password: ''
+
 
 # 日志相关配置
 log:
