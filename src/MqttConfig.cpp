@@ -75,6 +75,21 @@ bool MqttConfig::parse(const std::string& file_name) {
 
                 if (nodeProtocol["auth"].IsDefined()) {
                     auth_ = nodeProtocol["auth"].as<bool>();
+
+                    if (auth_ == true) {
+                        if (nodeProtocol["credentials"].IsDefined() &&
+                            nodeProtocol["credentials"].IsSequence()) {
+                            for (const auto& credential :
+                                 nodeProtocol["credentials"]) {
+                                auto username =
+                                    credential["username"].as<std::string>();
+                                auto password =
+                                    credential["password"].as<std::string>();
+
+                                credentials_[username] = password;
+                            }
+                        }
+                    }
                 }
             }
         }

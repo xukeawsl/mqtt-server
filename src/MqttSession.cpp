@@ -155,6 +155,10 @@ void MqttSession::handle_error_code() {
             SPDLOG_ERROR("Wrong mqtt publish topic name");
             break;
         }
+        case MQTT_RC_CODE::ERR_BAD_USERNAME_PASSWORD: {
+            SPDLOG_ERROR("Wrong mqtt username/password");
+            break;
+        }
         default: {
         }
     }
@@ -1095,13 +1099,13 @@ asio::awaitable<MQTT_RC_CODE> MqttSession::handle_connect() {
     }
 
     if (client_id.empty()) {
-        SPDLOG_ERROR("not support");
-        // 赞不支持 client_id 为空, 后续可以支持为无需保留会话的生成 client_id
+        // 暂不支持 client_id 为空, 后续可以支持为无需保留会话的生成 client_id
         rc = co_await send_connack(0x00,
                                    MQTT_CONNACK::REFUSED_IDENTIFIER_REJECTED);
         if (rc != MQTT_RC_CODE::ERR_SUCCESS) {
             co_return rc;
         }
+        co_return MQTT_RC_CODE::ERR_NOT_SUPPORTED;
     }
 
     // 读取遗嘱消息
@@ -1129,8 +1133,15 @@ asio::awaitable<MQTT_RC_CODE> MqttSession::handle_connect() {
     }
 
     // 进行密码校验
-    if (username_flag || password_flag) {
-        // 支持用户名或密码其中之一为空
+    if (MqttConfig::getInstance()->auth()) {
+        if (MqttConfig::getInstance()->auth(username, password) == false) {
+            rc = co_await send_connack(
+                0x00, MQTT_CONNACK::REFUSED_BAD_USERNAME_PASSWORD);
+            if (rc != MQTT_RC_CODE::ERR_SUCCESS) {
+                co_return rc;
+            }
+            co_return MQTT_RC_CODE::ERR_BAD_USERNAME_PASSWORD;
+        }
     }
 
     this->client_id = client_id;

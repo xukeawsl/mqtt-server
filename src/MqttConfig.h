@@ -1,12 +1,20 @@
 #pragma once
 
 #include <string>
+#include <unordered_map>
 
 class MqttConfig {
 public:
     static MqttConfig* getInstance();
 
     bool parse(const std::string& file_name);
+
+    bool auth(const std::string& username, const std::string& password) {
+        if (credentials_.empty()) {
+            return true;
+        }
+        return credentials_.count(username) && credentials_[username] == password;
+    };
 
     inline std::string address() const { return address_; }
 
@@ -59,4 +67,5 @@ private:
     uint32_t max_rotate_count_;
     uint32_t thread_pool_qsize_;
     uint32_t thread_count_;
+    std::unordered_map<std::string, std::string> credentials_;
 };

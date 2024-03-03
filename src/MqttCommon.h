@@ -46,6 +46,7 @@ enum class MQTT_RC_CODE: uint8_t {
     ERR_STR_LENGTH_UTF8,
     ERR_SUB_TOPIC_NAME,
     ERR_PUB_TOPIC_NAME,
+    ERR_BAD_USERNAME_PASSWORD,
 };
 
 struct MQTT_CMD {
