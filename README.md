@@ -1,5 +1,6 @@
 # mqtt-server 简介
 [![License](https://img.shields.io/npm/l/mithril.svg)](https://github.com/xukeawsl/mqtt-server/blob/master/LICENSE)
+[![Codacy Badge](https://app.codacy.com/project/badge/Grade/af9c4bb5e8ec479d9c4e2c76ba2ad6e2)](https://app.codacy.com/gh/xukeawsl/mqtt-server/dashboard?utm_source=gh&utm_medium=referral&utm_content=&utm_campaign=Badge_grade)
 
 mqtt-server 是一个使用 C++20 协程开发的支持 MQTT `v3.1.1` 协议的高性能 MQTT Broker,
 支持单机上万的并发连接, CPU 及内存占用小, 可以很好的运行在资源有限的机器上
