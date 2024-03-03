@@ -71,7 +71,13 @@ include_directories(
 
 add_executable(${PROJECT_NAME} main.cpp ${srcs})
 
-target_link_libraries(${PROJECT_NAME} PUBLIC pthread spdlog::spdlog yaml-cpp::yaml-cpp)
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux")
+    target_link_libraries(${PROJECT_NAME} PUBLIC pthread spdlog::spdlog yaml-cpp::yaml-cpp)
+elseif(CMAKE_SYSTEM_NAME STREQUAL "Windows")
+    target_link_libraries(${PROJECT_NAME} PUBLIC ws2_32 wsock32 spdlog::spdlog yaml-cpp::yaml-cpp)
+else()
+    message(STATUS "This operating system is not supported")
+endif()
 
 
 #
