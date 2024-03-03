@@ -17,6 +17,11 @@ void MqttServer::run() noexcept {
 
         asio::co_spawn(acceptor.get_executor(), handle_accept(),
                        asio::detached);
+        
+        SPDLOG_INFO("Mqtt Server Start");
+        SPDLOG_INFO("Mqtt Server Listening on {}", listen_endpoint);
+        SPDLOG_INFO("Mqtt Server Listening Adress Type : {}",
+                    listen_endpoint.address().is_v4() ? "IPv4" : "IPv6");
 
         io_context.run();
     } catch (const std::exception& e) {
