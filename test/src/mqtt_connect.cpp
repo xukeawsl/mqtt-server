@@ -39,7 +39,7 @@ TEST(MQTT_CONNECT_TEST, protocol_version) {
 
     uint8_t read_buf[4] = {0};
 
-    auto nread = asio::read(s, asio::buffer(read_buf, 4), ec);
+    auto nread = asio::read(s, asio::buffer(read_buf, sizeof(read_buf)), ec);
     if (ec) {
         ASSERT_TRUE(false) << ec.message();
     }

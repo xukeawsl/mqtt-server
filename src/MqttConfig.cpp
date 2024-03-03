@@ -7,21 +7,20 @@ MqttConfig* MqttConfig::getInstance() {
     return &config;
 }
 
-MqttConfig::MqttConfig() {
-    address_ = "0.0.0.0";
-    port_ = 1883;
-    connect_timeout_ = 60;
-    check_timeout_duration_ = 1;
-    check_waiting_map_duration_ = 1;
-    max_resend_count_ = 3;
-    resend_duration_ = 60;
-    max_waiting_time_ = 60;
-    auth_ = false;
-    name_ = "mqtt-server.log";
-    max_rotate_size_ = 1024 * 1024;
-    thread_pool_qsize_ = 8192;
-    thread_count_ = 1;
-}
+MqttConfig::MqttConfig()
+    : address_("0.0.0.0"),
+      port_(1883),
+      connect_timeout_(60),
+      check_timeout_duration_(1),
+      check_waiting_map_duration_(1),
+      max_resend_count_(3),
+      resend_duration_(60),
+      max_waiting_time_(60),
+      auth_(false),
+      name_("mqtt-server.log"),
+      max_rotate_size_(1024 * 1024),
+      thread_pool_qsize_(8192),
+      thread_count_(1) {}
 
 bool MqttConfig::parse(const std::string& file_name) {
     YAML::Node root;
