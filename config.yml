@@ -1,0 +1,47 @@
+# MQTT Server 相关配置
+server:
+  # 监听地址, 支持 IPv6 (默认 0.0.0.0)
+  address: '0.0.0.0'
+
+  # 监听端口 (默认 1883)
+  port: 1883
+
+  protocol:
+    # CONNECT 阶段的超时时间 (默认 60 秒, 为 0 表示不设置超时)
+    connect_timeout: 60
+
+    # 检查会话超时的间隔 (默认 1 秒)
+    check_timeout_duration: 1
+
+    # 检查需要重发的报文或过期等待报文的间隔 (默认 1 秒)
+    check_waiting_map_duration: 1
+
+    # 最大重发次数 (默认 3 次)
+    max_resend_count: 3
+
+    # 每一次重发的时间间隔 (默认 60 秒)
+    resend_duration: 60
+
+    # 等待响应的最大时间 (默认 60 秒)
+    max_waiting_time: 60
+
+    # 是否开启用户名/密码认证 (默认关闭)
+    auth: false
+
+
+# 日志相关配置
+log:
+  # 日志文件名 (默认 mqtt-server.log)
+  name: 'mqtt-server.log'
+
+  # 滚动日志单个日志的最大字节数 (默认 1MB = 1048576 B)
+  max_rotate_size: 1048576
+
+  # 滚动日志最大数量 (默认 10 个)
+  max_rotate_count: 10
+
+  # 日志线程池队列大小 (默认 8192)
+  thread_pool_qsize: 8192
+
+  # 日志线程池线程数 (默认 1 个日志线程)
+  thread_count: 1
