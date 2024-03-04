@@ -1870,7 +1870,10 @@ asio::awaitable<MQTT_RC_CODE> MqttSession::send_publish_qos1(
     SPDLOG_DEBUG("PUBLISH Qos1: command = [X'{:02X}'], packet id = [X'{:04X}']",
                  static_cast<uint16_t>(command), packet_id);
 
-    add_mqtt_fixed_header(header, command, pub_remaning_length);
+    rc = add_mqtt_fixed_header(header, command, pub_remaning_length);
+    if (rc != MQTT_RC_CODE::ERR_SUCCESS) {
+        co_return rc;
+    }
 
     sub_topic_length =
         asio::detail::socket_ops::host_to_network_short(sub_topic_length);
@@ -1931,7 +1934,10 @@ asio::awaitable<MQTT_RC_CODE> MqttSession::send_publish_qos2(
     SPDLOG_DEBUG("PUBLISH Qos2: command = [X'{:02X}'], packet id = [X'{:04X}']",
                  static_cast<uint16_t>(command), packet_id);
 
-    add_mqtt_fixed_header(header, command, pub_remaning_length);
+    rc = add_mqtt_fixed_header(header, command, pub_remaning_length);
+    if (rc != MQTT_RC_CODE::ERR_SUCCESS) {
+        co_return rc;
+    }
 
     sub_topic_length =
         asio::detail::socket_ops::host_to_network_short(sub_topic_length);
