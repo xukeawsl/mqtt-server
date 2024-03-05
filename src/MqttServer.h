@@ -23,4 +23,7 @@ private:
     asio::signal_set signals;
     asio::ip::tcp::acceptor acceptor;
     asio::ip::tcp::endpoint listen_endpoint;
+#ifdef MQ_WITH_TLS
+    asio::ssl::context ssl_context;
+#endif
 };

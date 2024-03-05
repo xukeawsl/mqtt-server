@@ -20,7 +20,10 @@ MqttConfig::MqttConfig()
       name_("mqtt-server.log"),
       max_rotate_size_(1024 * 1024),
       thread_pool_qsize_(8192),
-      thread_count_(1) {}
+      thread_count_(1),
+      version_(VERSION::TLSv12),
+      verify_mode_(SSL_VERIFY::NONE),
+      fail_if_no_peer_cert_(false) {}
 
 bool MqttConfig::parse(const std::string& file_name) {
     YAML::Node root;
@@ -92,6 +95,70 @@ bool MqttConfig::parse(const std::string& file_name) {
                 }
             }
         }
+
+#ifdef MQ_WITH_TLS
+        if (!root["ssl"].IsDefined()) {
+            throw "No SSL configuration";
+        }
+
+        auto nodeSSL = root["ssl"];
+
+        if (nodeSSL["version"].IsDefined() &&
+            nodeSSL["version"].as<std::string>() == "tls1.3") {
+            version_ = VERSION::TLSv13;
+        }
+
+        if (!nodeSSL["address"].IsDefined()) {
+            throw "No SSL listen address";
+        }
+
+        address_ = nodeSSL["address"].as<std::string>();
+
+        if (!nodeSSL["port"].IsDefined()) {
+            throw "No SSL listen port";
+        }
+
+        port_ = nodeSSL["port"].as<std::uint16_t>();
+
+        if (!nodeSSL["certfile"].IsDefined()) {
+            throw "No SSL certfile";
+        }
+
+        certfile_ = nodeSSL["certfile"].as<std::string>();
+
+        if (!nodeSSL["keyfile"].IsDefined()) {
+            throw "No SSL keyfile";
+        }
+
+        keyfile_ = nodeSSL["keyfile"].as<std::string>();
+
+        if (nodeSSL["password"].IsDefined()) {
+            password_ = nodeSSL["password"].as<std::string>();
+        }
+
+        if (!nodeSSL["verify_mode"].IsDefined()) {
+            throw "No SSL verify_mode";
+        }
+
+        if (nodeSSL["verify_mode"].as<std::string>() == "verify_peer") {
+            verify_mode_ = SSL_VERIFY::PEER;
+
+            if (nodeSSL["fail_if_no_peer_cert"].IsDefined()) {
+                fail_if_no_peer_cert_ =
+                    nodeSSL["fail_if_no_peer_cert"].as<bool>();
+            }
+
+            if (!nodeSSL["cacertfile"].IsDefined()) {
+                throw "No SSL cacertfile";
+            }
+
+            cacertfile_ = nodeSSL["cacertfile"].as<std::string>();
+        }
+
+        if (nodeSSL["dhparam"].IsDefined()) {
+            dhparam_ = nodeSSL["dhparam"].as<std::string>();
+        }
+#endif
 
         if (root["log"].IsDefined()) {
             auto nodeLog = root["log"];

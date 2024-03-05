@@ -6,12 +6,13 @@
 class MqttBroker;
 
 class MqttSession: public std::enable_shared_from_this<MqttSession> {
-private:
-    using default_token = asio::as_tuple_t<asio::use_awaitable_t<>>;
-    using tcp_socket = default_token::as_default_on_t<asio::ip::tcp::socket>;
-
 public:
+
+#ifdef MQ_WITH_TLS
+    MqttSession(asio::ssl::stream<asio::ip::tcp::socket> ssl_socket, MqttBroker& broker);
+#else
     MqttSession(asio::ip::tcp::socket client_socket, MqttBroker& mqtt_broker);
+#endif
 
     ~MqttSession();
 
@@ -24,6 +25,12 @@ public:
     void push_packet(const mqtt_packet_t& packet);
 
 private:
+#ifdef MQ_WITH_TLS
+    asio::awaitable<void> handle_handshake();
+#endif
+
+    void handle_session();
+
     void disconnect();
 
     void init_buffer();
@@ -122,7 +129,11 @@ public:
     static std::unordered_set<std::string> active_sub_set;
 
 private:
-    tcp_socket socket;
+#ifdef MQ_WITH_TLS
+    asio::ssl::stream<asio::ip::tcp::socket> socket;
+#else
+    asio::ip::tcp::socket socket;
+#endif
     std::string client_id;
     MqttBroker& broker;
     asio::steady_timer cond_timer;

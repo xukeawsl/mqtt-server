@@ -72,13 +72,27 @@ include_directories(
 add_executable(${PROJECT_NAME} main.cpp ${srcs})
 
 if (CMAKE_SYSTEM_NAME STREQUAL "Linux")
-    target_link_libraries(${PROJECT_NAME} PUBLIC pthread spdlog::spdlog yaml-cpp::yaml-cpp)
+    target_link_libraries(${PROJECT_NAME} PUBLIC
+        pthread
+        spdlog::spdlog
+        yaml-cpp::yaml-cpp)
 elseif(CMAKE_SYSTEM_NAME STREQUAL "Windows")
     target_link_libraries(${PROJECT_NAME} PUBLIC ws2_32 wsock32 spdlog::spdlog yaml-cpp::yaml-cpp)
 else()
     message(STATUS "This operating system is not supported")
 endif()
 
+#
+# SSL/TLS
+#
+if (MQ_WITH_TLS)
+    message(STATUS "Enable SSL/TLS for mqtt server")
+    add_definitions(-DMQ_WITH_TLS)
+
+    find_package(OpenSSL REQUIRED)
+
+    target_link_libraries(${PROJECT_NAME} PUBLIC OpenSSL::SSL)
+endif()
 
 #
 # Valgrind

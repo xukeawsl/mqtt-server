@@ -50,3 +50,11 @@ cmake --build .
 # Windows
 .\mqtt-server.exe
 ```
+
+### 4. 使用 SSL/TLS
+
+* 确保环境上已经安装了 `openssl` , 可以通过 `MQ_WITH_TLS` 选项来开启 `SSL/TLS` 功能
+
+```bash
+cmake -DMQ_WITH_TLS=On ..
+```

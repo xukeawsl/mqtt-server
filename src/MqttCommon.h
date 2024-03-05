@@ -12,6 +12,12 @@
 #include "asio.hpp"
 #include "asio/experimental/channel.hpp"
 
+#ifdef MQ_WITH_TLS
+
+#include "asio/ssl.hpp"
+
+#endif
+
 #include "MqttConfig.h"
 #include "MqttLogger.h"
 

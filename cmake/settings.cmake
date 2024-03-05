@@ -2,6 +2,11 @@
 # Project settings
 #
 
+#
+# SSL/TLS Support
+#
+#
+option(MQ_WITH_TLS "Enable SSL/TLS for mqtt server" OFF)
 
 #
 # Unit testing
