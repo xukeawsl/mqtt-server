@@ -45,8 +45,7 @@ void MqttSession::start() {
         [self = shared_from_this()] { return self->handle_handshake(); },
         asio::detached);
 #else
-    auto self = shared_from_this();
-    self->handle_session();
+    handle_session();
 #endif
 }
 
