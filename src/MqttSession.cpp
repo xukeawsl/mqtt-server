@@ -5,24 +5,12 @@
 std::unordered_set<std::string> MqttSession::active_sub_set;
 
 #ifdef MQ_WITH_TLS
-MqttSession::MqttSession(asio::ssl::stream<asio::ip::tcp::socket> ssl_socket,
+MqttSession::MqttSession(asio::ssl::stream<asio::ip::tcp::socket> client_socket,
                          MqttBroker& mqtt_broker)
-    : socket(std::move(ssl_socket)),
-      broker(mqtt_broker),
-      cond_timer(socket.get_executor()),
-      keep_alive_timer(socket.get_executor()),
-      check_timer(socket.get_executor()),
-      write_lock(socket.get_executor(), 1),
-      complete_connect(false),
-      rc(MQTT_RC_CODE::ERR_SUCCESS),
-      command(0) {
-    cond_timer.expires_at(std::chrono::steady_clock::time_point::max());
-    keep_alive_timer.expires_at(std::chrono::steady_clock::time_point::max());
-    check_timer.expires_at(std::chrono::steady_clock::time_point::max());
-}
 #else
 MqttSession::MqttSession(asio::ip::tcp::socket client_socket,
                          MqttBroker& mqtt_broker)
+#endif
     : socket(std::move(client_socket)),
       broker(mqtt_broker),
       cond_timer(socket.get_executor()),
@@ -36,7 +24,6 @@ MqttSession::MqttSession(asio::ip::tcp::socket client_socket,
     keep_alive_timer.expires_at(std::chrono::steady_clock::time_point::max());
     check_timer.expires_at(std::chrono::steady_clock::time_point::max());
 }
-#endif
 
 MqttSession::~MqttSession() {}
 
