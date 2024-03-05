@@ -19,7 +19,9 @@ MqttSession::MqttSession(asio::ip::tcp::socket client_socket,
       write_lock(socket.get_executor(), 1),
       complete_connect(false),
       rc(MQTT_RC_CODE::ERR_SUCCESS),
-      command(0) {
+      command(0),
+      pos(0),
+      remaining_length(0) {
     cond_timer.expires_at(std::chrono::steady_clock::time_point::max());
     keep_alive_timer.expires_at(std::chrono::steady_clock::time_point::max());
     check_timer.expires_at(std::chrono::steady_clock::time_point::max());
