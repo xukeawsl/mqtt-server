@@ -6,13 +6,11 @@ ENV GIT_SSL_NO_VERIFY=1
 
 RUN sed -i s@/archive.ubuntu.com/@/mirrors.aliyun.com/@g /etc/apt/sources.list
 
-# Install Required Packages
+# Install Required Packages and Clean up APT when done.
 RUN apt-get update \
     && apt-get install -y --no-install-recommends  g++ cmake make \
-    git openssl libssl-dev
-
-# Clean up APT when done.
-RUN apt-get clean && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
+    git openssl libssl-dev \
+    && apt-get clean && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
 
 RUN git clone https://github.com/xukeawsl/mqtt-server.git $MQTT_ROOT
 
