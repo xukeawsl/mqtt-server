@@ -51,13 +51,13 @@ ssl:
   version: 'tls1.2'
 
   # CA 证书, 双向认证时用于验证客户端证书, 单向认证可不配置
-  cacertfile: '../ca.crt'
+  cacertfile: '../certs/ca.crt'
 
   # 服务器证书
-  certfile: '../server.crt'
+  certfile: '../certs/server.crt'
 
   # 服务器私钥
-  keyfile: '../server.key'
+  keyfile: '../certs/server.key'
 
   # 服务器私钥受密码保护时需要提供密码
   # password: 'MQTT'
@@ -72,7 +72,7 @@ ssl:
 
   # 增强 SSL/TLS 连接的安全性, 可以使用 Diffie-Hellman 密钥交换算法（DH）
   # 来生成参数 (默认不使用)
-  # dhparam: '../dh4096.pem'
+  # dhparam: '../certs/dh4096.pem'
 
 
 # 日志相关配置
