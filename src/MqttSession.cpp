@@ -355,6 +355,10 @@ asio::awaitable<MQTT_RC_CODE> MqttSession::read_uint16_header_length_bytes(
         this->pos += slen;
     }
 
+    if (slen == 0) {
+        co_return rc;
+    }
+
     bytes.resize(slen);
 
     try {
