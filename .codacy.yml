@@ -1,5 +1,5 @@
 ---
 # codacy 检查不需要关心测试代码和三方库代码
 exclude_paths:
-  - "test/*"
-  - "third-party/*"
+  - "test/**"
+  - "third-party/**"
