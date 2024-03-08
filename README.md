@@ -62,10 +62,12 @@ cmake --build .
 .\mqtt-server.exe
 ```
 
-### 4. 使用 SSL/TLS
+## 文档
 
-* 确保环境上已经安装了 `openssl` , 可以通过 `MQ_WITH_TLS` 选项来开启 `SSL/TLS` 功能
+关于如何使用 `SSL/TLS` 或其他详细内容见 [wiki](https://github.com/xukeawsl/mqtt-server/wiki) 页面
 
-```bash
-cmake -DMQ_WITH_TLS=On ..
-```
+## 参考
+
+* https://github.com/mcxiaoke/mqtt
+
+* https://github.com/eclipse/mosquitto
