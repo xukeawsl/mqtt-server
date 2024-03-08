@@ -1,0 +1,4 @@
+---
+# codacy 检查不需要关心测试代码
+exclude_paths:
+  - "test/*"
