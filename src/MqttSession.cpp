@@ -22,9 +22,10 @@ MqttSession::MqttSession(asio::ip::tcp::socket client_socket,
       command(0),
       pos(0),
       remaining_length(0) {
-    cond_timer.expires_at(std::chrono::steady_clock::time_point::max());
-    keep_alive_timer.expires_at(std::chrono::steady_clock::time_point::max());
-    check_timer.expires_at(std::chrono::steady_clock::time_point::max());
+    this->cond_timer.expires_at(std::chrono::steady_clock::time_point::max());
+    this->keep_alive_timer.expires_at(
+        std::chrono::steady_clock::time_point::max());
+    this->check_timer.expires_at(std::chrono::steady_clock::time_point::max());
 }
 
 MqttSession::~MqttSession() {}
@@ -42,7 +43,8 @@ void MqttSession::start() {
 
 void MqttSession::handle_session() {
     // CONNECT 阶段的超时时间
-    session_state.keep_alive = MqttConfig::getInstance()->connect_timeout();
+    this->session_state.keep_alive =
+        MqttConfig::getInstance()->connect_timeout();
 
     asio::co_spawn(
         socket.get_executor(),
@@ -691,11 +693,12 @@ MQTT_RC_CODE MqttSession::check_command() {
         return rc;
     }
 
-    if ((this->command & 0xF0) == MQTT_CMD::CONNECT && complete_connect) {
+    if ((this->command & 0xF0) == MQTT_CMD::CONNECT && this->complete_connect) {
         rc = MQTT_RC_CODE::ERR_DUP_CONNECT;
     }
 
-    if ((this->command & 0xF0) != MQTT_CMD::CONNECT && !complete_connect) {
+    if ((this->command & 0xF0) != MQTT_CMD::CONNECT &&
+        !this->complete_connect) {
         rc = MQTT_RC_CODE::ERR_NOT_CONNECT;
     }
 
@@ -1025,7 +1028,7 @@ asio::awaitable<void> MqttSession::handle_packet() {
             break;
         }
 
-        switch (command & 0xF0) {
+        switch (this->command & 0xF0) {
             case MQTT_CMD::CONNECT:
                 this->rc = co_await handle_connect();
                 break;
@@ -1331,7 +1334,7 @@ asio::awaitable<MQTT_RC_CODE> MqttSession::handle_publish() {
         // 对于 qos2 级别, 如果客户端没有收到 PUBREC 报文, 可能会重传
         // 因此只要 packet_id 还没被服务端释放, 就不再接受重传的报文
         // 保证只有一个消息到达
-        if (dup == 1 && session_state.waiting_map.count(packet_id)) {
+        if (dup == 1 && this->session_state.waiting_map.count(packet_id)) {
             co_return rc;
         }
 
@@ -1490,7 +1493,7 @@ asio::awaitable<MQTT_RC_CODE> MqttSession::handle_pubrel() {
     }
 
     // 发送成功则释放 packet id
-    session_state.waiting_map.erase(iter);
+    this->session_state.waiting_map.erase(iter);
 
     co_return rc;
 }
