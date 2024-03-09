@@ -53,7 +53,7 @@ bool MqttLogger::init(const std::string& log_file, long unsigned max_rotateSize,
                 break;
         }
 
-        spdlog::set_pattern("[%Y-%m-%d %T.%f] [%^%l%$] %v");
+        spdlog::set_pattern("[%Y-%m-%d %T.%f] [%^%l%$] [%s:%#] %v");
     } catch (const spdlog::spdlog_ex& ex) {
         std::printf("MqttLogger Init Failed");
         return false;
