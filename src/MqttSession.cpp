@@ -68,20 +68,20 @@ asio::awaitable<void> MqttSession::handle_handshake() {
 }
 #endif
 
-std::string MqttSession::get_session_id() { return client_id; }
+std::string MqttSession::get_session_id() { return this->client_id; }
 
 void MqttSession::disconnect() {
     asio::error_code ignored_ec;
 #ifdef MQ_WITH_TLS
-    socket.shutdown(ignored_ec);
-    socket.next_layer().close(ignored_ec);
+    this->socket.shutdown(ignored_ec);
+    this->socket.next_layer().close(ignored_ec);
 #else
-    socket.close(ignored_ec);
+    this->socket.close(ignored_ec);
 #endif
-    cond_timer.cancel(ignored_ec);
-    keep_alive_timer.cancel(ignored_ec);
-    check_timer.cancel(ignored_ec);
-    write_lock.cancel();
+    this->cond_timer.cancel(ignored_ec);
+    this->keep_alive_timer.cancel(ignored_ec);
+    this->check_timer.cancel(ignored_ec);
+    this->write_lock.cancel();
 }
 
 void MqttSession::init_buffer() {
@@ -92,8 +92,8 @@ void MqttSession::init_buffer() {
 }
 
 void MqttSession::flush_deadline() {
-    if (session_state.keep_alive > 0) {
-        uint16_t keep_alive = session_state.keep_alive * 3 / 2;
+    if (this->session_state.keep_alive > 0) {
+        uint16_t keep_alive = this->session_state.keep_alive * 3 / 2;
 
         this->deadline =
             std::chrono::steady_clock::now() + std::chrono::seconds(keep_alive);
@@ -161,10 +161,6 @@ void MqttSession::handle_error_code() {
             SPDLOG_ERROR("Incorrect or unsupported protocol type");
             break;
         }
-        case MQTT_RC_CODE::ERR_KEEPALIVE: {
-            SPDLOG_ERROR("Connection Timeout");
-            break;
-        }
         case MQTT_RC_CODE::ERR_MALFORMED_UTF8: {
             SPDLOG_ERROR("Wrong mqtt utf8 string formation");
             break;
@@ -202,6 +198,7 @@ void MqttSession::handle_error_code() {
             break;
         }
         default: {
+            SPDLOG_ERROR("Other error");
         }
     }
 }
@@ -238,7 +235,6 @@ asio::awaitable<void> MqttSession::handle_keep_alive() {
 
         if (this->deadline <= std::chrono::steady_clock::now()) {
             disconnect();
-            this->rc = MQTT_RC_CODE::ERR_KEEPALIVE;
         }
     }
 }
@@ -249,7 +245,7 @@ void MqttSession::move_session_state(std::shared_ptr<MqttSession> new_session) {
     this->complete_connect = false;
 
     // 关闭旧会话的连接
-    this->disconnect();
+    disconnect();
 
     // 恢复会话状态
     if (new_session->session_state.clean_session == 0) {
@@ -282,7 +278,8 @@ asio::awaitable<MQTT_RC_CODE> MqttSession::read_byte(uint8_t* addr,
     }
 
     try {
-        co_await async_read(socket, asio::buffer(addr, 1), asio::use_awaitable);
+        co_await async_read(this->socket, asio::buffer(addr, 1),
+                            asio::use_awaitable);
     } catch (...) {
         co_return MQTT_RC_CODE::ERR_NO_CONN;
     }
@@ -303,8 +300,10 @@ asio::awaitable<MQTT_RC_CODE> MqttSession::read_uint16(uint16_t* addr,
     }
 
     try {
-        co_await async_read(socket, asio::buffer(&msb, 1), asio::use_awaitable);
-        co_await async_read(socket, asio::buffer(&lsb, 1), asio::use_awaitable);
+        co_await async_read(this->socket, asio::buffer(&msb, 1),
+                            asio::use_awaitable);
+        co_await async_read(this->socket, asio::buffer(&lsb, 1),
+                            asio::use_awaitable);
     } catch (...) {
         co_return MQTT_RC_CODE::ERR_NO_CONN;
     }
@@ -325,10 +324,15 @@ asio::awaitable<MQTT_RC_CODE> MqttSession::read_bytes_to_buf(std::string& bytes,
         this->pos += n;
     }
 
+    if (n == 0) {
+        co_return MQTT_RC_CODE::ERR_SUCCESS;
+    }
+
     bytes.resize(n);
 
     try {
-        co_await async_read(socket, asio::buffer(bytes.data(), bytes.length()),
+        co_await async_read(this->socket,
+                            asio::buffer(bytes.data(), bytes.length()),
                             asio::use_awaitable);
     } catch (...) {
         co_return MQTT_RC_CODE::ERR_NO_CONN;
@@ -362,7 +366,8 @@ asio::awaitable<MQTT_RC_CODE> MqttSession::read_uint16_header_length_bytes(
     bytes.resize(slen);
 
     try {
-        co_await async_read(socket, asio::buffer(bytes.data(), bytes.length()),
+        co_await async_read(this->socket,
+                            asio::buffer(bytes.data(), bytes.length()),
                             asio::use_awaitable);
     } catch (...) {
         co_return MQTT_RC_CODE::ERR_NO_CONN;
@@ -842,7 +847,7 @@ asio::awaitable<MQTT_RC_CODE> MqttSession::send_suback(
          asio::buffer(payload.data(), payload.length())}};
 
     try {
-        co_await async_write(socket, buf, asio::use_awaitable);
+        co_await async_write(this->socket, buf, asio::use_awaitable);
     } catch (...) {
         co_return MQTT_RC_CODE::ERR_NO_CONN;
     }
@@ -869,7 +874,7 @@ asio::awaitable<MQTT_RC_CODE> MqttSession::send_unsuback(uint16_t packet_id) {
          asio::buffer(&net_packet_id, sizeof(uint16_t))}};
 
     try {
-        co_await async_write(socket, buf, asio::use_awaitable);
+        co_await async_write(this->socket, buf, asio::use_awaitable);
     } catch (...) {
         co_return MQTT_RC_CODE::ERR_NO_CONN;
     }
@@ -896,7 +901,7 @@ asio::awaitable<MQTT_RC_CODE> MqttSession::send_puback(uint16_t packet_id) {
          asio::buffer(&net_packet_id, sizeof(uint16_t))}};
 
     try {
-        co_await async_write(socket, buf, asio::use_awaitable);
+        co_await async_write(this->socket, buf, asio::use_awaitable);
     } catch (...) {
         co_return MQTT_RC_CODE::ERR_NO_CONN;
     }
@@ -923,7 +928,7 @@ asio::awaitable<MQTT_RC_CODE> MqttSession::send_pubrec(uint16_t packet_id) {
          asio::buffer(&net_packet_id, sizeof(uint16_t))}};
 
     try {
-        co_await async_write(socket, buf, asio::use_awaitable);
+        co_await async_write(this->socket, buf, asio::use_awaitable);
     } catch (...) {
         co_return MQTT_RC_CODE::ERR_NO_CONN;
     }
@@ -950,7 +955,7 @@ asio::awaitable<MQTT_RC_CODE> MqttSession::send_pubrel(uint16_t packet_id) {
          asio::buffer(&net_packet_id, sizeof(uint16_t))}};
 
     try {
-        co_await async_write(socket, buf, asio::use_awaitable);
+        co_await async_write(this->socket, buf, asio::use_awaitable);
     } catch (...) {
         co_return MQTT_RC_CODE::ERR_NO_CONN;
     }
@@ -977,7 +982,7 @@ asio::awaitable<MQTT_RC_CODE> MqttSession::send_pubcomp(uint16_t packet_id) {
          asio::buffer(&net_packet_id, sizeof(uint16_t))}};
 
     try {
-        co_await async_write(socket, buf, asio::use_awaitable);
+        co_await async_write(this->socket, buf, asio::use_awaitable);
     } catch (...) {
         co_return MQTT_RC_CODE::ERR_NO_CONN;
     }
@@ -997,7 +1002,7 @@ asio::awaitable<MQTT_RC_CODE> MqttSession::send_pingresp() {
     }
 
     try {
-        co_await async_write(socket,
+        co_await async_write(this->socket,
                              asio::buffer(packet.data(), packet.length()),
                              asio::use_awaitable);
     } catch (...) {
@@ -1222,9 +1227,9 @@ asio::awaitable<MQTT_RC_CODE> MqttSession::handle_connect() {
 
     this->client_id = client_id;
 
-    session_state.clean_session = clean_session;
-    session_state.keep_alive = keep_alive;
-    session_state.will_topic = will_topic;
+    this->session_state.clean_session = clean_session;
+    this->session_state.keep_alive = keep_alive;
+    this->session_state.will_topic = will_topic;
 
     // 加入 broker
     session_present = this->broker.join_or_update(shared_from_this());
@@ -1619,10 +1624,10 @@ asio::awaitable<MQTT_RC_CODE> MqttSession::handle_unsubscribe() {
 
     // 删除对应主题订阅信息
     for (auto& name : unsub_topic_list) {
-        session_state.sub_topic_map.erase(name);
+        this->session_state.sub_topic_map.erase(name);
     }
 
-    if (session_state.sub_topic_map.empty()) {
+    if (this->session_state.sub_topic_map.empty()) {
         MqttSession::active_sub_set.erase(this->client_id);
     }
 
@@ -1646,7 +1651,7 @@ asio::awaitable<MQTT_RC_CODE> MqttSession::handle_disconnect() {
     disconnect();
 
     // 删除会话关联的遗嘱消息
-    session_state.will_topic = mqtt_packet_t{};
+    this->session_state.will_topic = mqtt_packet_t{};
 
     co_return rc;
 }
@@ -1665,11 +1670,11 @@ asio::awaitable<MQTT_RC_CODE> MqttSession::handle_inflighting_packets() {
         this->socket.is_open()
 #endif
     ) {
-        if (!session_state.inflight_queue.empty()) {
-            packet = session_state.inflight_queue.front();
-            session_state.inflight_queue.pop();
+        if (!this->session_state.inflight_queue.empty()) {
+            packet = this->session_state.inflight_queue.front();
+            this->session_state.inflight_queue.pop();
 
-            for (auto& [sub_topic, qos] : session_state.sub_topic_map) {
+            for (auto& [sub_topic, qos] : this->session_state.sub_topic_map) {
                 // 保留消息指定了具体的主题名称
                 if (packet.retain && packet.specified_topic_name.length() &&
                     sub_topic != packet.specified_topic_name) {
@@ -1893,7 +1898,7 @@ asio::awaitable<void> MqttSession::send_publish_qos0(mqtt_packet_t packet) {
          asio::buffer(payload.data(), payload.length())}};
 
     try {
-        co_await async_write(socket, buf, asio::use_awaitable);
+        co_await async_write(this->socket, buf, asio::use_awaitable);
     } catch (...) {
         SPDLOG_WARN("Failed to publish topic = [{}]", std::string(topic_name));
         co_return;
@@ -1956,7 +1961,7 @@ asio::awaitable<MQTT_RC_CODE> MqttSession::send_publish_qos1(
          asio::buffer(payload.data(), payload.length())}};
 
     try {
-        co_await async_write(socket, buf, asio::use_awaitable);
+        co_await async_write(this->socket, buf, asio::use_awaitable);
     } catch (...) {
         SPDLOG_WARN("Failed to publish topic = [{}]", std::string(topic_name));
         co_return MQTT_RC_CODE::ERR_NO_CONN;
@@ -2021,7 +2026,7 @@ asio::awaitable<MQTT_RC_CODE> MqttSession::send_publish_qos2(
          asio::buffer(payload.data(), payload.length())}};
 
     try {
-        co_await async_write(socket, buf, asio::use_awaitable);
+        co_await async_write(this->socket, buf, asio::use_awaitable);
     } catch (...) {
         SPDLOG_WARN("Failed to publish topic = [{}]", std::string(topic_name));
         co_return MQTT_RC_CODE::ERR_NO_CONN;
