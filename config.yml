@@ -79,7 +79,7 @@ ssl:
 # 日志相关配置
 log:
   # 日志文件名 (默认 mqtt-server.log)
-  name: 'mqtt-server.log'
+  name: 'logs/mqtt-server.log'
 
   # 滚动日志单个日志的最大字节数 (默认 1MB = 1048576 B)
   max_rotate_size: 1048576
