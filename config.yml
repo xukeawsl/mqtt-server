@@ -9,7 +9,7 @@ server:
   protocol:
     # CONNECT 阶段的超时时间, 考虑到网络延时实际程序中设置的超时
     # 时间为其 1.5 倍 (默认 10 秒, 为 0 表示不设置超时)
-    connect_timeout: 2
+    connect_timeout: 10
 
     # 检查会话超时的间隔 (默认 1 秒)
     check_timeout_duration: 1
