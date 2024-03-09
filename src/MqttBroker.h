@@ -5,6 +5,10 @@
 
 class MqttBroker {
 public:
+    MqttBroker();
+
+    ~MqttBroker() = default;
+
     bool join_or_update(std::shared_ptr<MqttSession> session);
 
     void leave(const std::string& sid);

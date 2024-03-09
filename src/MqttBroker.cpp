@@ -1,5 +1,7 @@
 #include "MqttBroker.h"
 
+MqttBroker::MqttBroker() : gen_sid_counter(0) {}
+
 bool MqttBroker::join_or_update(std::shared_ptr<MqttSession> session) {
     bool session_present = false;
     std::string sid = session->get_session_id();
