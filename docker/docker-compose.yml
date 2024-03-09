@@ -1,0 +1,32 @@
+version: '2.0'
+
+services:
+
+  server:
+    image: xukeawsl/mqtt-server:latest
+    container_name: mqtt-server
+
+    # 1883 用于 TCP, 8883 用于 TLS
+    ports:
+      - 1883:1883
+      - 8883:8883
+
+    volumes:
+      # 挂载存放日志的目录
+      - /etc/mqtt-server/logs:/root/mqtt-server/build/logs
+
+      # 挂载存放证书的目录
+      - /etc/mqtt-server/certs:/root/mqtt-server/certs
+
+    environment:
+      - TZ=Asia/Shanghai
+
+    restart: always
+
+    logging:
+      driver: 'json-file'
+      options:
+        max-size: '10m'
+        max-file: '5'
+
+    privileged: true
