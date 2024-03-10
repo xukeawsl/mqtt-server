@@ -19,7 +19,7 @@ mqtt-server 是一个使用 C++20 协程开发的支持 MQTT `v3.1.1` 协议的�
 
 * 比 `EMQX` 更优秀的性能和更低的资源消耗 (详见[压测报告](https://github.com/xukeawsl/mqtt-server/tree/master/bench))
 
-* 支持 Docker 部署
+* 支持 Docker 部署 (详见 [wiki](https://github.com/xukeawsl/mqtt-server/wiki/3.Use-Docker-Image) 页面)
 
 ## 使用
 
