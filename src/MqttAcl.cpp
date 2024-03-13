@@ -6,8 +6,6 @@ bool MqttAcl::load_acl(const std::string& acl_file) {
     try {
         YAML::Node root = YAML::LoadFile(acl_file);
 
-        std::string tmp;
-
         for (const auto& config : root) {
             mqtt_acl_rule_t rule;
 
@@ -15,7 +13,7 @@ bool MqttAcl::load_acl(const std::string& acl_file) {
                 throw "acl file no permission";
             }
 
-            tmp = config["permission"].as<std::string>();
+            std::string tmp = config["permission"].as<std::string>();
 
             if (tmp == "allow")
                 rule.permission = MQTT_ACL_STATE::ALLOW;
