@@ -27,7 +27,7 @@ server:
     max_waiting_time: 60
 
     # 是否开启用户名/密码认证 (默认关闭)
-    auth: true
+    auth: false
 
     # 用户名/密码对, 只有 auth 开启程序才会读取
     # 用户名不可重复, 重复了后面的会覆盖前面的
