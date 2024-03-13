@@ -1,9 +1,7 @@
 #pragma once
 
-#include <string>
-#include <unordered_map>
-
 #include "MqttCommon.h"
+#include "MqttAcl.h"
 
 class MqttConfig {
 public:
@@ -73,6 +71,10 @@ public:
 
     inline std::string dhparam() const { return dhparam_; }
 
+    bool acl_enable() const { return enable_; }
+
+    bool acl_check(const mqtt_acl_rule_t& rule);
+
 private:
     MqttConfig();
     ~MqttConfig() = default;
@@ -105,4 +107,8 @@ private:
     SSL_VERIFY verify_mode_;
     bool fail_if_no_peer_cert_;
     std::string dhparam_;
+    bool enable_;
+    std::string acl_file_;
+    bool default_;
+    MqttAcl acl_;
 };

@@ -10,20 +10,22 @@ MqttConfig* MqttConfig::getInstance() {
 MqttConfig::MqttConfig()
     : address_("0.0.0.0"),
       port_(1883),
-      connect_timeout_(60),
+      connect_timeout_(10),
       check_timeout_duration_(1),
       check_waiting_map_duration_(1),
       max_resend_count_(3),
       resend_duration_(60),
       max_waiting_time_(60),
       auth_(false),
-      name_("mqtt-server.log"),
+      name_("logs/mqtt-server.log"),
       max_rotate_size_(1024 * 1024),
       thread_pool_qsize_(8192),
       thread_count_(1),
       version_(VERSION::TLSv12),
       verify_mode_(SSL_VERIFY::NONE),
-      fail_if_no_peer_cert_(false) {}
+      fail_if_no_peer_cert_(false),
+      enable_(false),
+      default_(false) {}
 
 bool MqttConfig::parse(const std::string& file_name) {
     YAML::Node root;
@@ -89,6 +91,29 @@ bool MqttConfig::parse(const std::string& file_name) {
                                     credential["password"].as<std::string>();
 
                                 credentials_[username] = password;
+                            }
+                        }
+
+                        if (nodeProtocol["acl"].IsDefined()) {
+                            auto nodeAcl = nodeProtocol["acl"];
+                            if (nodeAcl["enable"].IsDefined()) {
+                                enable_ = nodeAcl["enable"].as<bool>();
+                            }
+
+                            if (enable_ && !nodeAcl["acl_file"].IsDefined()) {
+                                throw "No ACL FILE configuration";
+                            }
+
+                            acl_file_ = nodeAcl["acl_file"].as<std::string>();
+
+                            if (!acl_.load_acl(acl_file_)) {
+                                throw "Faied to Load acl file: " + acl_file_;
+                            }
+
+                            if (nodeAcl["default"].IsDefined() &&
+                                nodeAcl["default"].as<std::string>() ==
+                                    "allow") {
+                                default_ = true;
                             }
                         }
                     }
@@ -193,4 +218,12 @@ bool MqttConfig::parse(const std::string& file_name) {
     }
 
     return true;
+}
+
+bool MqttConfig::acl_check(const mqtt_acl_rule_t& rule) {
+    auto state = acl_.check_acl(rule);
+    if (state == MQTT_ACL_STATE::NONE) {
+        return default_;
+    }
+    return state == MQTT_ACL_STATE::ALLOW;
 }

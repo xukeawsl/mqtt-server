@@ -1,6 +1,7 @@
 #pragma once
 
 #include <list>
+#include <regex>
 #include <queue>
 #include <vector>
 #include <string>
@@ -18,8 +19,8 @@
 
 #endif
 
-#include "MqttConfig.h"
 #include "MqttLogger.h"
+
 
 enum class MQTT_MSG_STATE: uint8_t {
     INVALID = 0,
@@ -53,7 +54,9 @@ enum class MQTT_RC_CODE: uint8_t {
     ERR_PUB_TOPIC_NAME,
     ERR_BAD_USERNAME_PASSWORD,
     ERR_BAD_CLIENT_ID,
+    ERR_REFUSED_NOT_AUTHORIZED,
 };
+
 
 struct MQTT_CMD {
     static constexpr uint8_t CONNECT = 0x10U;
@@ -71,6 +74,7 @@ struct MQTT_CMD {
     static constexpr uint8_t PINGRESP = 0xD0U;
     static constexpr uint8_t DISCONNECT = 0xE0U;
 };
+
 
 struct MQTT_CONNACK {
     static constexpr uint8_t ACCEPTED = 0x00U;
@@ -108,8 +112,47 @@ struct mqtt_packet_t {
         {}
 };
 
+enum class MQTT_ACL_STATE: uint8_t {
+    NONE,
+    ALLOW,
+    DENY,
+};
+
+enum class MQTT_ACL_TYPE: uint8_t {
+    USERNAME,
+    IPADDR,
+    CLIENTID,
+};
+
+enum class MQTT_ACL_MODE: uint8_t {
+    EQ,
+    RE,
+};
+
+enum class MQTT_ACL_ACTION: uint8_t {
+    SUB,
+    PUB,
+    ALL,
+};
+
+struct mqtt_acl_rule_t {
+    MQTT_ACL_STATE permission;
+    MQTT_ACL_TYPE type;
+    std::string object;
+    MQTT_ACL_MODE mode;
+    MQTT_ACL_ACTION action;
+    std::unique_ptr<std::unordered_set<std::string>> topics;
+
+    mqtt_acl_rule_t():
+        permission(MQTT_ACL_STATE::NONE),
+        type(MQTT_ACL_TYPE::USERNAME),
+        mode(MQTT_ACL_MODE::EQ),
+        action(MQTT_ACL_ACTION::ALL)
+        {}
+};
+
 namespace convert {
-    
+
 template <typename InternetProtocol>
 std::string format_address(
     const asio::ip::basic_endpoint<InternetProtocol>& endpoint) {
@@ -120,5 +163,13 @@ std::string format_address(
     return endpoint.address().to_string() + ":" +
            std::to_string(endpoint.port());
 }
+
+}
+
+
+namespace util {
+
+bool check_topic_match(const std::string& pub_topic,
+                                    const std::string& sub_topic);
 
 }

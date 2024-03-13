@@ -63,7 +63,7 @@ std::string MqttBroker::gen_session_id() {
     do {
         sid = "MS_" + std::to_string(gen_sid_counter);
         gen_sid_counter++;
-    } while (session_map.count(sid));
+    } while (session_map.contains(sid));
 
     return sid;
 }

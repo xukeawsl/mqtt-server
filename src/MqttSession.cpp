@@ -1,6 +1,7 @@
 #include "MqttSession.h"
 
 #include "MqttBroker.h"
+#include "MqttConfig.h"
 
 std::unordered_set<std::string> MqttSession::active_sub_set;
 
@@ -199,6 +200,10 @@ void MqttSession::handle_error_code() {
             SPDLOG_ERROR("Wrong mqtt client id");
             break;
         }
+        case MQTT_RC_CODE::ERR_REFUSED_NOT_AUTHORIZED: {
+            SPDLOG_ERROR("Wrong authentication");
+            break;
+        }
         default: {
             SPDLOG_ERROR("Other error");
         }
@@ -213,7 +218,7 @@ uint16_t MqttSession::gen_packet_id() {
         if (this->session_state.packet_id_gen == 0) {
             this->session_state.packet_id_gen++;
         }
-    } while (this->session_state.waiting_map.count(
+    } while (this->session_state.waiting_map.contains(
         this->session_state.packet_id_gen));
 
     return this->session_state.packet_id_gen;
@@ -441,87 +446,6 @@ MQTT_RC_CODE MqttSession::check_validate_utf8(const std::string& ustr) {
     }
 
     return MQTT_RC_CODE::ERR_SUCCESS;
-}
-
-bool MqttSession::check_topic_match(const std::string& pub_topic,
-                                    const std::string& sub_topic) {
-    uint32_t pub_len = pub_topic.length();
-    uint32_t sub_len = sub_topic.length();
-    uint32_t i = 0, j = 0;
-
-    if (pub_len == 0 || sub_len == 0) {
-        return true;
-    }
-
-    while (i < pub_len && j < sub_len) {
-        if (pub_topic[i] == sub_topic[j]) {
-            i++;
-            j++;
-            continue;
-        }
-
-        if (sub_topic[j] == '+') {
-            if (pub_topic[i] == '/') {
-                if (j + 1 < sub_len) {
-                    i++;
-                    j += 2;    // 后一位一定是 '/', 需要跨过
-                } else {
-                    return false;
-                }
-            } else {
-                // 匹配一个层级
-                while (i < pub_len && pub_topic[i] != '/') {
-                    i++;
-                }
-
-                if (i == pub_len) {
-                    if (j == sub_len - 1) {
-                        // 最后一个层级匹配
-                        return true;
-                    }
-
-                    // example:
-                    // pub("xx") sub("+/#")
-                    if (j + 2 < sub_len && sub_topic[j + 2] == '#') {
-                        return true;
-                    }
-
-                    return false;
-                }
-
-                // 本层匹配完成, 进入下一层
-                if (j + 1 < sub_len) {
-                    i++;
-                    j += 2;
-                }
-            }
-        } else if (sub_topic[j] == '#') {
-            return true;
-        } else {
-            return false;
-        }
-    }
-
-    // example:
-    // pub("xx/")  sub("xx/#")
-    // pub("/") sub("#")
-    if (j < sub_len && sub_topic[j] == '#') {
-        return true;
-    }
-
-    // example:
-    // pub("xx") sub("xx/#")
-    if (j < sub_len && sub_topic[j] == '/') {
-        if (j + 1 < sub_len && sub_topic[j + 1] == '#') {
-            return true;
-        }
-    }
-
-    if (i == pub_len && j == sub_len) {
-        return true;
-    }
-
-    return false;
 }
 
 asio::awaitable<MQTT_RC_CODE> MqttSession::read_utf8_string(std::string& str,
@@ -1077,7 +1001,6 @@ asio::awaitable<void> MqttSession::handle_packet() {
 
 asio::awaitable<MQTT_RC_CODE> MqttSession::handle_connect() {
     MQTT_RC_CODE rc = MQTT_RC_CODE::ERR_SUCCESS;
-
     uint16_t protocol_name_length;
     std::string protocol_name;
     uint8_t protocol_version;
@@ -1226,6 +1149,43 @@ asio::awaitable<MQTT_RC_CODE> MqttSession::handle_connect() {
             }
             co_return MQTT_RC_CODE::ERR_BAD_USERNAME_PASSWORD;
         }
+
+        this->username = username;
+    }
+
+    // 进行 ACL 校验
+    if (MqttConfig::getInstance()->acl_enable()) {
+        mqtt_acl_rule_t rule;
+        rule.type = MQTT_ACL_TYPE::IPADDR;
+        asio::error_code ec;
+
+        rule.object = this->socket.remote_endpoint(ec).address().to_string();
+        if (ec) {
+            co_return MQTT_RC_CODE::ERR_NO_CONN;
+        }
+
+        SPDLOG_DEBUG("remote ip addr : [{}]", rule.object);
+
+        if (!MqttConfig::getInstance()->acl_check(rule)) {
+            rc = co_await send_connack(0x00,
+                                       MQTT_CONNACK::REFUSED_NOT_AUTHORIZED);
+            if (rc != MQTT_RC_CODE::ERR_SUCCESS) {
+                co_return rc;
+            }
+            co_return MQTT_RC_CODE::ERR_REFUSED_NOT_AUTHORIZED;
+        }
+
+        rule.type = MQTT_ACL_TYPE::CLIENTID;
+        rule.object = client_id;
+
+        if (!MqttConfig::getInstance()->acl_check(rule)) {
+            rc = co_await send_connack(0x00,
+                                       MQTT_CONNACK::REFUSED_NOT_AUTHORIZED);
+            if (rc != MQTT_RC_CODE::ERR_SUCCESS) {
+                co_return rc;
+            }
+            co_return MQTT_RC_CODE::ERR_REFUSED_NOT_AUTHORIZED;
+        }
     }
 
     this->client_id = client_id;
@@ -1334,7 +1294,7 @@ asio::awaitable<MQTT_RC_CODE> MqttSession::handle_publish() {
         // 对于 qos2 级别, 如果客户端没有收到 PUBREC 报文, 可能会重传
         // 因此只要 packet_id 还没被服务端释放, 就不再接受重传的报文
         // 保证只有一个消息到达
-        if (dup == 1 && this->session_state.waiting_map.count(packet_id)) {
+        if (dup == 1 && this->session_state.waiting_map.contains(packet_id)) {
             co_return rc;
         }
 
@@ -1346,6 +1306,22 @@ asio::awaitable<MQTT_RC_CODE> MqttSession::handle_publish() {
             std::chrono::seconds(MqttConfig::getInstance()->max_waiting_time());
 
         this->session_state.waiting_map[packet_id] = std::move(packet);
+    }
+
+    // ACL 检查
+    if (MqttConfig::getInstance()->acl_enable()) {
+        mqtt_acl_rule_t rule;
+        rule.type = MQTT_ACL_TYPE::USERNAME;
+        rule.object = this->username;
+        rule.action = MQTT_ACL_ACTION::PUB;
+        rule.topics = std::make_unique<std::unordered_set<std::string>>();
+
+        rule.topics->emplace(pub_topic);
+
+        // 检查不通过则不再对此消息处理
+        if (!MqttConfig::getInstance()->acl_check(rule)) {
+            co_return MQTT_RC_CODE::ERR_SUCCESS;
+        }
     }
 
     // 组包
@@ -1570,7 +1546,25 @@ asio::awaitable<MQTT_RC_CODE> MqttSession::handle_subscribe() {
             co_return MQTT_RC_CODE::ERR_PROTOCOL;
         }
 
-        sub_topic_list.emplace_back(std::move(tmp_topic), tmp_qos);
+        if (MqttConfig::getInstance()->acl_enable()) {
+            mqtt_acl_rule_t rule;
+            rule.type = MQTT_ACL_TYPE::USERNAME;
+            rule.object = this->username;
+            rule.action = MQTT_ACL_ACTION::SUB;
+            rule.topics = std::make_unique<std::unordered_set<std::string>>();
+
+            rule.topics->emplace(tmp_topic);
+
+            if (MqttConfig::getInstance()->acl_check(rule)) {
+                sub_topic_list.emplace_back(std::move(tmp_topic), tmp_qos);
+            } else {
+                tmp_qos = 0x80;    // 表示失败
+            }
+
+        } else {
+            sub_topic_list.emplace_back(std::move(tmp_topic), tmp_qos);
+        }
+
         suback_payload.push_back(tmp_qos);
     }
 
@@ -1683,7 +1677,7 @@ asio::awaitable<MQTT_RC_CODE> MqttSession::handle_inflighting_packets() {
                     sub_topic != packet.specified_topic_name) {
                     continue;
                 }
-                if (check_topic_match(*(packet.topic_name), sub_topic)) {
+                if (util::check_topic_match(*(packet.topic_name), sub_topic)) {
                     // Qos 等级取两者最小值
                     old_qos = packet.qos;
 

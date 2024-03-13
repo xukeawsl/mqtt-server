@@ -1,0 +1,31 @@
+# 规则 1
+  # 当前规则的权限, 有允许(allow)和拒绝(deny)
+- permission: 'allow'
+  # 控制的类型, 支持用户名(username)、IP地址(ipaddr)和用户标识符(clientid)
+  type: 'username'
+  # 控制的对象
+  object: 'key1'
+  # object 的匹配模式, 支持精确匹配(eq)和正则匹配(re)
+  mode: 'eq'
+  # 控制的行为, 只有控制类型为 username 时需要设置, 其它两种都是对连接的控制
+  # 支持订阅(sub)、发布(pub)或全部(all)
+  action: 'all'
+  # 控制的主题, 只有控制类型为 username 时需要设置, 支持设置多个主题名, 主题
+  # 名支持通配符, 对于 sub 来说使用精确匹配, pub 则是使用通配符规则匹配
+  topics:
+    - 'topic/hello'
+    - '+/world'
+
+# 规则 2
+- permission: 'allow'
+  type: 'ipaddr'
+  object: '.*'
+  mode: 're'
+
+# 规则 3
+- permission: 'allow'
+  type: 'clientid'
+  # 使用正则表达式匹配 'mqtt_' 开头的 clientid
+  object: 'mqttx_.*'
+  mode: 're'
+

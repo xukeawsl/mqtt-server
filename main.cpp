@@ -1,3 +1,4 @@
+#include "MqttConfig.h"
 #include "MqttServer.h"
 
 int main(int argc, char* argv[]) {

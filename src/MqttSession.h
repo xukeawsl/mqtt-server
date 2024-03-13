@@ -1,6 +1,5 @@
 #pragma once
 
-#include "MqttCommon.h"
 #include "MqttSessionState.h"
 
 class MqttBroker;
@@ -89,8 +88,6 @@ private:
 
     MQTT_RC_CODE check_validate_utf8(const std::string& ustr);
 
-    bool check_topic_match(const std::string& pub_topic, const std::string& sub_topic);
-
     asio::awaitable<MQTT_RC_CODE> read_remaining_length();
 
     asio::awaitable<MQTT_RC_CODE> read_fixed_header();
@@ -134,6 +131,7 @@ private:
 #else
     asio::ip::tcp::socket socket;
 #endif
+    std::string username;
     std::string client_id;
     MqttBroker& broker;
     asio::steady_timer cond_timer;

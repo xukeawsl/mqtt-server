@@ -27,7 +27,7 @@ server:
     max_waiting_time: 60
 
     # 是否开启用户名/密码认证 (默认关闭)
-    auth: false
+    auth: true
 
     # 用户名/密码对, 只有 auth 开启程序才会读取
     # 用户名不可重复, 重复了后面的会覆盖前面的
@@ -39,6 +39,15 @@ server:
       # 用户名密码可以为空字符串
       # - username: ''
       #   password: ''
+    
+    # 是否开启 ACL 认证, 只有 auth 开启时才会读取
+    acl:
+      enable: false
+      # ACL 规则文件, 使用 yml 文件配置
+      acl_file: '../acl_rules.yml'
+      # 当进行 ACL 检查时, 从上到下一次匹配规则, 直到匹配到一个允许或拒绝时停止
+      # 如果都没有匹配到, 根据此默认项设置是允许还是拒绝
+      default: 'deny'
 
 # SSL/TLS 相关配置, 构建启用 MQ_WITH_TLS 时读取
 ssl:
