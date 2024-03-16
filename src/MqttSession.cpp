@@ -1206,6 +1206,9 @@ asio::awaitable<MQTT_RC_CODE> MqttSession::handle_connect() {
     // CONNECT 完成标志设置
     this->complete_connect = true;
 
+    // 添加自动订阅项
+    add_subscribe(MqttConfig::getInstance()->auto_subscribe_list());
+
     // 开启协程用于处理需要当前会话转发的主题
     asio::co_spawn(
         this->socket.get_executor(),
@@ -1573,21 +1576,8 @@ asio::awaitable<MQTT_RC_CODE> MqttSession::handle_subscribe() {
         co_return rc;
     }
 
-    // 更新存在订阅的会话
-    MqttSession::active_sub_set.emplace(this->client_id);
-
-    // 读取完并发送完响应, 进行订阅表项更新
-    for (auto& [name, qos] : sub_topic_list) {
-        SPDLOG_DEBUG("subscribe topic name = [{}], qos = [X'{:02X}']", name,
-                     static_cast<uint16_t>(qos));
-
-        this->session_state.sub_topic_map[name] = qos;
-
-        // 获取保留消息, 只针对当前新增的主题
-        this->broker.get_retain(shared_from_this(), name);
-    }
-
-    // 请求获取保留消息
+    // 添加订阅项
+    add_subscribe(sub_topic_list);
 
     co_return MQTT_RC_CODE::ERR_SUCCESS;
 }
@@ -2030,4 +2020,24 @@ asio::awaitable<MQTT_RC_CODE> MqttSession::send_publish_qos2(
     }
 
     co_return rc;
+}
+
+void MqttSession::add_subscribe(
+    const std::list<std::pair<std::string, uint8_t>>& sub_topic_list) {
+    if (sub_topic_list.empty()) {
+        return;
+    }
+
+    // 更新存在订阅的会话
+    MqttSession::active_sub_set.emplace(this->client_id);
+
+    for (const auto& [name, qos] : sub_topic_list) {
+        SPDLOG_DEBUG("subscribe topic name = [{}], qos = [X'{:02X}']", name,
+                     static_cast<uint16_t>(qos));
+
+        this->session_state.sub_topic_map[name] = qos;
+
+        // 获取保留消息, 只针对当前新增的主题
+        this->broker.get_retain(shared_from_this(), name);
+    }
 }

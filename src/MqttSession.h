@@ -120,6 +120,7 @@ private:
 
     asio::awaitable<MQTT_RC_CODE> send_publish_qos2(mqtt_packet_t packet, bool is_new);
 
+    void add_subscribe(const std::list<std::pair<std::string, uint8_t>>& sub_topic_list);
 
 public:
     // 统计存在订阅项的会话, 优化消息分发的性能

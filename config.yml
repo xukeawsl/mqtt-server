@@ -49,6 +49,15 @@ server:
       # 如果都没有匹配到, 根据此默认项设置是允许还是拒绝
       default: 'deny'
 
+    # 自动订阅列表, 订阅行为不受 ACL 控制
+    # auto_subscribe_list:
+    #   - topic: 'auto/topic0'
+    #     qos: 0
+    #   - topic: 'auto/topic1'
+    #     qos: 1
+    #   - topic: 'auto/topic2'
+    #     qos: 2
+
 # SSL/TLS 相关配置, 构建启用 MQ_WITH_TLS 时读取
 ssl:
   # 监听地址

@@ -71,9 +71,11 @@ public:
 
     inline std::string dhparam() const { return dhparam_; }
 
-    bool acl_enable() const { return enable_; }
+    inline bool acl_enable() const { return enable_; }
 
     bool acl_check(const mqtt_acl_rule_t& rule);
+
+    inline const auto& auto_subscribe_list() const { return auto_subscribe_list_; }
 
 private:
     MqttConfig();
@@ -111,4 +113,5 @@ private:
     std::string acl_file_;
     bool default_;
     MqttAcl acl_;
+    std::list<std::pair<std::string, uint8_t>> auto_subscribe_list_;
 };
