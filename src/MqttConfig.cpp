@@ -119,13 +119,10 @@ bool MqttConfig::parse(const std::string& file_name) {
                 }
 
                 if (nodeProtocol["auto_subscribe_list"].IsDefined()) {
-                    std::string topic;
-                    uint8_t qos;
-
                     for (const auto& sub :
                          nodeProtocol["auto_subscribe_list"]) {
-                        topic = sub["topic"].as<std::string>();
-                        qos = sub["qos"].as<uint8_t>();
+                        std::string topic = sub["topic"].as<std::string>();
+                        uint8_t qos = sub["qos"].as<uint8_t>();
 
                         auto_subscribe_list_.emplace_back(std::move(topic),
                                                           qos);
