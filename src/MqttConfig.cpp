@@ -100,13 +100,13 @@ bool MqttConfig::parse(const std::string& file_name) {
                             }
 
                             if (enable_ && !nodeAcl["acl_file"].IsDefined()) {
-                                throw "No ACL FILE configuration";
+                                throw std::runtime_error("No ACL FILE configuration");
                             }
 
                             acl_file_ = nodeAcl["acl_file"].as<std::string>();
 
                             if (!acl_.load_acl(acl_file_)) {
-                                throw "Faied to Load acl file: " + acl_file_;
+                                throw std::runtime_error("Faied to Load acl file: " + acl_file_);
                             }
 
                             if (nodeAcl["default"].IsDefined() &&
@@ -133,7 +133,7 @@ bool MqttConfig::parse(const std::string& file_name) {
 
 #ifdef MQ_WITH_TLS
         if (!root["ssl"].IsDefined()) {
-            throw "No SSL configuration";
+            throw std::runtime_error("No SSL configuration");
         }
 
         auto nodeSSL = root["ssl"];
@@ -144,25 +144,25 @@ bool MqttConfig::parse(const std::string& file_name) {
         }
 
         if (!nodeSSL["address"].IsDefined()) {
-            throw "No SSL listen address";
+            throw std::runtime_error("No SSL listen address");
         }
 
         address_ = nodeSSL["address"].as<std::string>();
 
         if (!nodeSSL["port"].IsDefined()) {
-            throw "No SSL listen port";
+            throw std::runtime_error("No SSL listen port");
         }
 
         port_ = nodeSSL["port"].as<std::uint16_t>();
 
         if (!nodeSSL["certfile"].IsDefined()) {
-            throw "No SSL certfile";
+            throw std::runtime_error("No SSL certfile");
         }
 
         certfile_ = nodeSSL["certfile"].as<std::string>();
 
         if (!nodeSSL["keyfile"].IsDefined()) {
-            throw "No SSL keyfile";
+            throw std::runtime_error("No SSL keyfile");
         }
 
         keyfile_ = nodeSSL["keyfile"].as<std::string>();
@@ -172,7 +172,7 @@ bool MqttConfig::parse(const std::string& file_name) {
         }
 
         if (!nodeSSL["verify_mode"].IsDefined()) {
-            throw "No SSL verify_mode";
+            throw std::runtime_error("No SSL verify_mode");
         }
 
         if (nodeSSL["verify_mode"].as<std::string>() == "verify_peer") {
@@ -184,7 +184,7 @@ bool MqttConfig::parse(const std::string& file_name) {
             }
 
             if (!nodeSSL["cacertfile"].IsDefined()) {
-                throw "No SSL cacertfile";
+                throw std::runtime_error("No SSL cacertfile");
             }
 
             cacertfile_ = nodeSSL["cacertfile"].as<std::string>();
