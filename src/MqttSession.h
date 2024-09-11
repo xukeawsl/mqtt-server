@@ -108,9 +108,9 @@ private:
 
     asio::awaitable<MQTT_RC_CODE> send_pingresp();
 
-    asio::awaitable<MQTT_RC_CODE> handle_inflighting_packets();
+    asio::awaitable<void> handle_inflighting_packets();
 
-    asio::awaitable<MQTT_RC_CODE> handle_waiting_map_packets();
+    asio::awaitable<void> handle_waiting_map_packets();
 
     asio::awaitable<MQTT_RC_CODE> send_mqtt_packets(const std::list<mqtt_packet_t>& packet_list);
 
