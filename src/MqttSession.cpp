@@ -546,6 +546,8 @@ asio::awaitable<MQTT_RC_CODE> MqttSession::read_will_packet(
         std::make_shared<const std::string>(std::move(will_topic_name));
     packet.payload =
         std::make_shared<const std::string>(std::move(will_payload));
+
+    co_return rc;
 }
 
 asio::awaitable<MQTT_RC_CODE> MqttSession::read_remaining_length() {
@@ -1643,7 +1645,7 @@ asio::awaitable<MQTT_RC_CODE> MqttSession::handle_disconnect() {
     co_return rc;
 }
 
-asio::awaitable<MQTT_RC_CODE> MqttSession::handle_inflighting_packets() {
+asio::awaitable<void> MqttSession::handle_inflighting_packets() {
     MQTT_RC_CODE rc;
     mqtt_packet_t packet;
     uint8_t old_qos;
@@ -1694,7 +1696,7 @@ asio::awaitable<MQTT_RC_CODE> MqttSession::handle_inflighting_packets() {
     }
 }
 
-asio::awaitable<MQTT_RC_CODE> MqttSession::handle_waiting_map_packets() {
+asio::awaitable<void> MqttSession::handle_waiting_map_packets() {
     MQTT_RC_CODE rc;
     auto check_duration = std::chrono::seconds(
         MqttConfig::getInstance()->check_waiting_map_duration());
