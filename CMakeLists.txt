@@ -63,6 +63,7 @@ endif()
 
 file(GLOB_RECURSE srcs ${PROJECT_SOURCE_DIR}/src/*.cpp)
 file(GLOB_RECURSE hrds ${PROJECT_SOURCE_DIR}/src/*.h)
+file(GLOB_RECURSE ipps ${PROJECT_SOURCE_DIR}/src/*.ipp)
 
 include_directories(
     third-party/asio/include
@@ -127,7 +128,7 @@ if (CLANG_FORMAT_EXECUTABLE)
     message(STATUS "You can use the `make clang-format` command to automatically format the code style")
     add_custom_target(clang-format
     COMMAND
-        ${CLANG_FORMAT_EXECUTABLE} --style=file -i ${hdrs};${srcs};${PROJECT_SOURCE_DIR}/main.cpp
+        ${CLANG_FORMAT_EXECUTABLE} --style=file -i ${hdrs};${srcs};${ipps};${PROJECT_SOURCE_DIR}/main.cpp
     COMMENT
         "Automatically format the code style"
     )

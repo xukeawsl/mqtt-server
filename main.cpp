@@ -13,8 +13,7 @@ int main(int argc, char* argv[]) {
         return EXIT_FAILURE;
     }
 
-    MqttServer server(MqttConfig::getInstance()->address(),
-                      MqttConfig::getInstance()->port());
+    MqttServer server;
     server.run();
 
     return EXIT_SUCCESS;

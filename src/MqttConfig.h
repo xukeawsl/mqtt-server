@@ -3,18 +3,12 @@
 #include "MqttCommon.h"
 #include "MqttAcl.h"
 
+namespace YAML
+{
+    class Node;
+}
+
 class MqttConfig {
-public:
-    enum class VERSION : uint8_t {
-        TLSv12,
-        TLSv13,
-    };
-
-    enum class SSL_VERIFY : uint8_t {
-        NONE,
-        PEER,
-    };
-
 public:
     static MqttConfig* getInstance();
 
@@ -26,10 +20,6 @@ public:
         }
         return credentials_.count(username) && credentials_[username] == password;
     };
-
-    inline std::string address() const { return address_; }
-
-    inline uint16_t port() const { return port_; }
 
     inline uint32_t connect_timeout() const { return connect_timeout_; }
 
@@ -55,27 +45,13 @@ public:
 
     inline uint32_t thread_count() const { return thread_count_; }
 
-    VERSION version() const { return version_; }
-
-    inline std::string cacertfile() const { return cacertfile_; }
-
-    inline std::string certfile() const { return certfile_; }
-
-    inline std::string keyfile() const { return keyfile_; }
-
-    inline std::string password() const { return password_; }
-
-    inline SSL_VERIFY verify_mode() const { return verify_mode_; }
-
-    inline bool fail_if_no_peer_cert() const { return fail_if_no_peer_cert_; }
-
-    inline std::string dhparam() const { return dhparam_; }
-
     inline bool acl_enable() const { return enable_; }
 
     bool acl_check(const mqtt_acl_rule_t& rule);
 
     inline const auto& auto_subscribe_list() const { return auto_subscribe_list_; }
+
+    inline const auto& listeners() const { return listeners_; }
 
 private:
     MqttConfig();
@@ -85,9 +61,11 @@ private:
     MqttConfig(MqttConfig&&) = delete;
     MqttConfig& operator=(MqttConfig&&) = delete;
 
+    void parse_listeners(YAML::Node& node);
+
 private:
-    std::string address_;
-    uint16_t port_;
+    mqtt_ssl_cfg_t default_ssl_cfg_;
+    std::vector<mqtt_listener_cfg_t> listeners_;
     uint32_t connect_timeout_;
     uint32_t check_timeout_duration_;
     uint32_t check_waiting_map_duration_;
@@ -101,14 +79,6 @@ private:
     uint32_t thread_pool_qsize_;
     uint32_t thread_count_;
     std::unordered_map<std::string, std::string> credentials_;
-    VERSION version_;
-    std::string cacertfile_;
-    std::string certfile_;
-    std::string keyfile_;
-    std::string password_;
-    SSL_VERIFY verify_mode_;
-    bool fail_if_no_peer_cert_;
-    std::string dhparam_;
     bool enable_;
     std::string acl_file_;
     bool default_;

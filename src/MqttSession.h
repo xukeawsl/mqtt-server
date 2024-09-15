@@ -1,16 +1,16 @@
 #pragma once
 
+#include "MqttBroker.h"
+#include "MqttConfig.h"
 #include "MqttSessionState.h"
 
-class MqttBroker;
-
-class MqttSession: public std::enable_shared_from_this<MqttSession> {
+template <typename SocketType>
+class MqttSession: public std::enable_shared_from_this<MqttSession<SocketType>> {
 public:
-
 #ifdef MQ_WITH_TLS
-    MqttSession(asio::ssl::stream<asio::ip::tcp::socket> ssl_socket, MqttBroker& broker);
+    MqttSession(SocketType client_socket, MqttBroker<asio::ip::tcp::socket, asio::ssl::stream<asio::ip::tcp::socket>>& mqtt_broker);
 #else
-    MqttSession(asio::ip::tcp::socket client_socket, MqttBroker& mqtt_broker);
+    MqttSession(SocketType client_socket, MqttBroker<asio::ip::tcp::socket>& mqtt_broker);
 #endif
 
     ~MqttSession();
@@ -19,7 +19,7 @@ public:
 
     std::string get_session_id();
 
-    void move_session_state(std::shared_ptr<MqttSession> old_session);
+    void move_session_state(std::shared_ptr<MqttSession<SocketType>> old_session);
 
     void push_packet(const mqtt_packet_t& packet);
 
@@ -122,19 +122,21 @@ private:
 
     void add_subscribe(const std::list<std::pair<std::string, uint8_t>>& sub_topic_list);
 
+    bool is_open();
+
 public:
     // 统计存在订阅项的会话, 优化消息分发的性能
     static std::unordered_set<std::string> active_sub_set;
 
 private:
-#ifdef MQ_WITH_TLS
-    asio::ssl::stream<asio::ip::tcp::socket> socket;
-#else
-    asio::ip::tcp::socket socket;
-#endif
+    SocketType socket;
     std::string username;
     std::string client_id;
-    MqttBroker& broker;
+#ifdef MQ_WITH_TLS
+    MqttBroker<asio::ip::tcp::socket, asio::ssl::stream<asio::ip::tcp::socket>>& broker;
+#else
+    MqttBroker<asio::ip::tcp::socket>& broker;
+#endif
     asio::steady_timer cond_timer;
     asio::steady_timer keep_alive_timer;
     asio::steady_timer check_timer;
@@ -147,3 +149,5 @@ private:
     uint32_t remaining_length;
     std::chrono::steady_clock::time_point deadline;
 };
+
+#include "MqttSession.ipp"

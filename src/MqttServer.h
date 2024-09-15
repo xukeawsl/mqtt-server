@@ -1,11 +1,12 @@
 #pragma once
 
+#include "MqttCommon.h"
 #include "MqttBroker.h"
 #include "MqttSession.h"
 
 class MqttServer {
 public:
-    MqttServer(const std::string& host, uint16_t port);
+    MqttServer();
 
     ~MqttServer();
 
@@ -16,14 +17,14 @@ private:
 
     void stop();
 
-    asio::awaitable<void> handle_accept();
+    asio::awaitable<void> handle_accept(asio::ip::tcp::acceptor acceptor, mqtt_listener_cfg_t cfg);
 
 private:
     asio::io_context io_context;
     asio::signal_set signals;
-    asio::ip::tcp::acceptor acceptor;
-    asio::ip::tcp::endpoint listen_endpoint;
 #ifdef MQ_WITH_TLS
-    asio::ssl::context ssl_context;
+    MqttBroker<asio::ip::tcp::socket, asio::ssl::stream<asio::ip::tcp::socket>> broker;
+#else
+    MqttBroker<asio::ip::tcp::socket> broker;
 #endif
 };

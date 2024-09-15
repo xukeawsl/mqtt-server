@@ -8,9 +8,7 @@ MqttConfig* MqttConfig::getInstance() {
 }
 
 MqttConfig::MqttConfig()
-    : address_("0.0.0.0"),
-      port_(1883),
-      connect_timeout_(10),
+    : connect_timeout_(10),
       check_timeout_duration_(1),
       check_waiting_map_duration_(1),
       max_resend_count_(3),
@@ -21,27 +19,73 @@ MqttConfig::MqttConfig()
       max_rotate_size_(1024 * 1024),
       thread_pool_qsize_(8192),
       thread_count_(1),
-      version_(VERSION::TLSv12),
-      verify_mode_(SSL_VERIFY::NONE),
-      fail_if_no_peer_cert_(false),
       enable_(false),
-      default_(false) {}
+      default_(false) {
+    default_ssl_cfg_.version = MQTT_SSL_VERSION::TLSv12;
+    default_ssl_cfg_.verify_mode = MQTT_SSL_VERIFY::NONE;
+    default_ssl_cfg_.fail_if_no_peer_cert = false;
+}
 
 bool MqttConfig::parse(const std::string& file_name) {
     YAML::Node root;
     try {
         root = YAML::LoadFile(file_name);
 
+        if (!root["ssl"].IsDefined()) {
+            throw std::runtime_error("No SSL configuration");
+        }
+
+        auto nodeSSL = root["ssl"];
+
+        if (nodeSSL["version"].IsDefined() &&
+            nodeSSL["version"].as<std::string>() == "tls1.3") {
+            default_ssl_cfg_.version = MQTT_SSL_VERSION::TLSv13;
+        }
+
+        if (!nodeSSL["certfile"].IsDefined()) {
+            throw std::runtime_error("No SSL certfile");
+        }
+
+        default_ssl_cfg_.certfile = nodeSSL["certfile"].as<std::string>();
+
+        if (!nodeSSL["keyfile"].IsDefined()) {
+            throw std::runtime_error("No SSL keyfile");
+        }
+
+        default_ssl_cfg_.keyfile = nodeSSL["keyfile"].as<std::string>();
+
+        if (nodeSSL["password"].IsDefined()) {
+            default_ssl_cfg_.password = nodeSSL["password"].as<std::string>();
+        }
+
+        if (nodeSSL["verify_mode"].IsDefined() &&
+            nodeSSL["verify_mode"].as<std::string>() == "verify_peer") {
+            default_ssl_cfg_.verify_mode = MQTT_SSL_VERIFY::PEER;
+
+            if (nodeSSL["fail_if_no_peer_cert"].IsDefined()) {
+                default_ssl_cfg_.fail_if_no_peer_cert =
+                    nodeSSL["fail_if_no_peer_cert"].as<bool>();
+            }
+
+            if (!nodeSSL["cacertfile"].IsDefined()) {
+                throw std::runtime_error("No SSL cacertfile");
+            }
+
+            default_ssl_cfg_.cacertfile =
+                nodeSSL["cacertfile"].as<std::string>();
+        }
+
+        if (nodeSSL["dhparam"].IsDefined()) {
+            default_ssl_cfg_.dhparam = nodeSSL["dhparam"].as<std::string>();
+        }
+
+        if (root["listeners"].IsDefined()) {
+            auto nodeListeners = root["listeners"];
+            parse_listeners(nodeListeners);
+        }
+
         if (root["server"].IsDefined()) {
             auto nodeServer = root["server"];
-
-            if (nodeServer["address"].IsDefined()) {
-                address_ = nodeServer["address"].as<std::string>();
-            }
-
-            if (nodeServer["port"].IsDefined()) {
-                port_ = nodeServer["port"].as<uint16_t>();
-            }
 
             if (nodeServer["protocol"].IsDefined()) {
                 auto nodeProtocol = nodeServer["protocol"];
@@ -100,13 +144,15 @@ bool MqttConfig::parse(const std::string& file_name) {
                             }
 
                             if (enable_ && !nodeAcl["acl_file"].IsDefined()) {
-                                throw std::runtime_error("No ACL FILE configuration");
+                                throw std::runtime_error(
+                                    "No ACL FILE configuration");
                             }
 
                             acl_file_ = nodeAcl["acl_file"].as<std::string>();
 
                             if (!acl_.load_acl(acl_file_)) {
-                                throw std::runtime_error("Faied to Load acl file: " + acl_file_);
+                                throw std::runtime_error(
+                                    "Faied to Load acl file: " + acl_file_);
                             }
 
                             if (nodeAcl["default"].IsDefined() &&
@@ -130,70 +176,6 @@ bool MqttConfig::parse(const std::string& file_name) {
                 }
             }
         }
-
-#ifdef MQ_WITH_TLS
-        if (!root["ssl"].IsDefined()) {
-            throw std::runtime_error("No SSL configuration");
-        }
-
-        auto nodeSSL = root["ssl"];
-
-        if (nodeSSL["version"].IsDefined() &&
-            nodeSSL["version"].as<std::string>() == "tls1.3") {
-            version_ = VERSION::TLSv13;
-        }
-
-        if (!nodeSSL["address"].IsDefined()) {
-            throw std::runtime_error("No SSL listen address");
-        }
-
-        address_ = nodeSSL["address"].as<std::string>();
-
-        if (!nodeSSL["port"].IsDefined()) {
-            throw std::runtime_error("No SSL listen port");
-        }
-
-        port_ = nodeSSL["port"].as<std::uint16_t>();
-
-        if (!nodeSSL["certfile"].IsDefined()) {
-            throw std::runtime_error("No SSL certfile");
-        }
-
-        certfile_ = nodeSSL["certfile"].as<std::string>();
-
-        if (!nodeSSL["keyfile"].IsDefined()) {
-            throw std::runtime_error("No SSL keyfile");
-        }
-
-        keyfile_ = nodeSSL["keyfile"].as<std::string>();
-
-        if (nodeSSL["password"].IsDefined()) {
-            password_ = nodeSSL["password"].as<std::string>();
-        }
-
-        if (!nodeSSL["verify_mode"].IsDefined()) {
-            throw std::runtime_error("No SSL verify_mode");
-        }
-
-        if (nodeSSL["verify_mode"].as<std::string>() == "verify_peer") {
-            verify_mode_ = SSL_VERIFY::PEER;
-
-            if (nodeSSL["fail_if_no_peer_cert"].IsDefined()) {
-                fail_if_no_peer_cert_ =
-                    nodeSSL["fail_if_no_peer_cert"].as<bool>();
-            }
-
-            if (!nodeSSL["cacertfile"].IsDefined()) {
-                throw std::runtime_error("No SSL cacertfile");
-            }
-
-            cacertfile_ = nodeSSL["cacertfile"].as<std::string>();
-        }
-
-        if (nodeSSL["dhparam"].IsDefined()) {
-            dhparam_ = nodeSSL["dhparam"].as<std::string>();
-        }
-#endif
 
         if (root["log"].IsDefined()) {
             auto nodeLog = root["log"];
@@ -236,4 +218,96 @@ bool MqttConfig::acl_check(const mqtt_acl_rule_t& rule) {
         return default_;
     }
     return state == MQTT_ACL_STATE::ALLOW;
+}
+
+void MqttConfig::parse_listeners(YAML::Node& node) {
+    for (const auto& nodeListener : node) {
+        mqtt_listener_cfg_t cfg;
+
+        cfg.port = nodeListener["port"].as<uint16_t>();
+
+        std::string address = nodeListener["address"].as<std::string>();
+        auto pos = address.find("://");
+        if (pos == std::string::npos) {
+            throw std::runtime_error("error format: listeners-address");
+        }
+        std::string protocol = address.substr(0, pos);
+        cfg.address = address.substr(pos + 3);
+
+        if (protocol == "mqtt") {
+            cfg.proto = MQTT_PROTOCOL::MQTT;
+        } else if (protocol == "mqtts") {
+            cfg.proto = MQTT_PROTOCOL::MQTTS;
+        } else {
+            throw std::runtime_error(
+                "not supported protocol: listeners-address");
+        }
+
+        if (cfg.proto == MQTT_PROTOCOL::MQTTS) {
+            mqtt_ssl_cfg_t ssl_cfg;
+
+            if (node["version"].IsDefined() &&
+                node["version"].as<std::string>() == "tls1.3") {
+                ssl_cfg.version = MQTT_SSL_VERSION::TLSv13;
+            } else {
+                ssl_cfg.version = default_ssl_cfg_.version;
+            }
+
+            if (!node["certfile"].IsDefined() ||
+                node["certfile"].as<std::string>().empty()) {
+                ssl_cfg.certfile = default_ssl_cfg_.certfile;
+            } else {
+                ssl_cfg.certfile = node["certfile"].as<std::string>();
+            }
+
+            if (!node["keyfile"].IsDefined() ||
+                node["keyfile"].as<std::string>().empty()) {
+                ssl_cfg.keyfile = default_ssl_cfg_.keyfile;
+            } else {
+                ssl_cfg.keyfile = node["keyfile"].as<std::string>();
+            }
+
+            if (node["password"].IsDefined()) {
+                ssl_cfg.password = node["password"].as<std::string>();
+            } else {
+                ssl_cfg.password = default_ssl_cfg_.password;
+            }
+
+            if (node["verify_mode"].IsDefined()) {
+                if (node["verify_mode"].as<std::string>() == "verfy_peer") {
+                    ssl_cfg.verify_mode = MQTT_SSL_VERIFY::PEER;
+                } else {
+                    ssl_cfg.verify_mode = MQTT_SSL_VERIFY::NONE;
+                }
+            } else {
+                ssl_cfg.verify_mode = default_ssl_cfg_.verify_mode;
+            }
+
+            if (ssl_cfg.verify_mode == MQTT_SSL_VERIFY::PEER) {
+                if (node["fail_if_no_peer_cert"].IsDefined()) {
+                    ssl_cfg.fail_if_no_peer_cert =
+                        node["fail_if_no_peer_cert"].as<bool>();
+                } else {
+                    ssl_cfg.fail_if_no_peer_cert =
+                        default_ssl_cfg_.fail_if_no_peer_cert;
+                }
+
+                if (!node["cacertfile"].IsDefined()) {
+                    ssl_cfg.cacertfile = default_ssl_cfg_.cacertfile;
+                } else {
+                    ssl_cfg.cacertfile = node["cacertfile"].as<std::string>();
+                }
+            }
+
+            if (node["dhparam"].IsDefined()) {
+                ssl_cfg.dhparam = node["dhparam"].as<std::string>();
+            } else {
+                ssl_cfg.dhparam = default_ssl_cfg_.dhparam;
+            }
+
+            cfg.ssl_cfg = std::move(ssl_cfg);
+        }
+
+        listeners_.emplace_back(std::move(cfg));
+    }
 }

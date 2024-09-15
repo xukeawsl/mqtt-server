@@ -1,17 +1,16 @@
-#include "MqttSession.h"
+template <typename SocketType>
+std::unordered_set<std::string> MqttSession<SocketType>::active_sub_set;
 
-#include "MqttBroker.h"
-#include "MqttConfig.h"
-
-std::unordered_set<std::string> MqttSession::active_sub_set;
-
+template <typename SocketType>
+MqttSession<SocketType>::MqttSession(
+    SocketType client_socket,
 #ifdef MQ_WITH_TLS
-MqttSession::MqttSession(asio::ssl::stream<asio::ip::tcp::socket> client_socket,
-                         MqttBroker& mqtt_broker)
+    MqttBroker<asio::ip::tcp::socket, asio::ssl::stream<asio::ip::tcp::socket>>&
+        mqtt_broker
 #else
-MqttSession::MqttSession(asio::ip::tcp::socket client_socket,
-                         MqttBroker& mqtt_broker)
+    MqttBroker<asio::ip::tcp::socket>& mqtt_broker
 #endif
+    )
     : socket(std::move(client_socket)),
       broker(mqtt_broker),
       cond_timer(socket.get_executor()),
@@ -29,37 +28,48 @@ MqttSession::MqttSession(asio::ip::tcp::socket client_socket,
     this->check_timer.expires_at(std::chrono::steady_clock::time_point::max());
 }
 
-MqttSession::~MqttSession() {}
+template <typename SocketType>
+MqttSession<SocketType>::~MqttSession() {}
 
-void MqttSession::start() {
+template <typename SocketType>
+void MqttSession<SocketType>::start() {
 #ifdef MQ_WITH_TLS
-    asio::co_spawn(
-        socket.get_executor(),
-        [self = shared_from_this()] { return self->handle_handshake(); },
-        asio::detached);
+    if constexpr (std::is_same_v<SocketType,
+                                 asio::ssl::stream<asio::ip::tcp::socket>>) {
+        asio::co_spawn(
+            socket.get_executor(),
+            [self = this->shared_from_this()] {
+                return self->handle_handshake();
+            },
+            asio::detached);
+    } else {
+        handle_session();
+    }
 #else
     handle_session();
 #endif
 }
 
-void MqttSession::handle_session() {
+template <typename SocketType>
+void MqttSession<SocketType>::handle_session() {
     // CONNECT 阶段的超时时间
     this->session_state.keep_alive =
         MqttConfig::getInstance()->connect_timeout();
 
     asio::co_spawn(
         socket.get_executor(),
-        [self = shared_from_this()] { return self->handle_packet(); },
+        [self = this->shared_from_this()] { return self->handle_packet(); },
         asio::detached);
 
     asio::co_spawn(
         socket.get_executor(),
-        [self = shared_from_this()] { return self->handle_keep_alive(); },
+        [self = this->shared_from_this()] { return self->handle_keep_alive(); },
         asio::detached);
 }
 
 #ifdef MQ_WITH_TLS
-asio::awaitable<void> MqttSession::handle_handshake() {
+template <typename SocketType>
+asio::awaitable<void> MqttSession<SocketType>::handle_handshake() {
     try {
         co_await socket.async_handshake(asio::ssl::stream_base::server,
                                         asio::use_awaitable);
@@ -71,13 +81,22 @@ asio::awaitable<void> MqttSession::handle_handshake() {
 }
 #endif
 
-std::string MqttSession::get_session_id() { return this->client_id; }
+template <typename SocketType>
+std::string MqttSession<SocketType>::get_session_id() {
+    return this->client_id;
+}
 
-void MqttSession::disconnect() {
+template <typename SocketType>
+void MqttSession<SocketType>::disconnect() {
     asio::error_code ignored_ec;
 #ifdef MQ_WITH_TLS
-    this->socket.shutdown(ignored_ec);
-    this->socket.next_layer().close(ignored_ec);
+    if constexpr (std::is_same_v<SocketType,
+                                 asio::ssl::stream<asio::ip::tcp::socket>>) {
+        this->socket.shutdown(ignored_ec);
+        this->socket.next_layer().close(ignored_ec);
+    } else {
+        this->socket.close(ignored_ec);
+    }
 #else
     this->socket.close(ignored_ec);
 #endif
@@ -87,14 +106,16 @@ void MqttSession::disconnect() {
     this->write_lock.cancel();
 }
 
-void MqttSession::init_buffer() {
+template <typename SocketType>
+void MqttSession<SocketType>::init_buffer() {
     this->rc = MQTT_RC_CODE::ERR_SUCCESS;
     this->pos = 0;
     this->command = 0;
     this->remaining_length = 0;
 }
 
-void MqttSession::flush_deadline() {
+template <typename SocketType>
+void MqttSession<SocketType>::flush_deadline() {
     if (this->session_state.keep_alive > 0) {
         uint16_t keep_alive = this->session_state.keep_alive * 3 / 2;
 
@@ -103,12 +124,13 @@ void MqttSession::flush_deadline() {
     }
 }
 
-void MqttSession::handle_error_code() {
+template <typename SocketType>
+void MqttSession<SocketType>::handle_error_code() {
     disconnect();
 
     // 会话清理
     if (this->complete_connect && this->session_state.clean_session) {
-        MqttSession::active_sub_set.erase(this->client_id);
+        MqttSession<SocketType>::active_sub_set.erase(this->client_id);
         this->broker.leave(this->client_id);
     }
 
@@ -210,7 +232,8 @@ void MqttSession::handle_error_code() {
     }
 }
 
-uint16_t MqttSession::gen_packet_id() {
+template <typename SocketType>
+uint16_t MqttSession<SocketType>::gen_packet_id() {
     do {
         this->session_state.packet_id_gen++;
 
@@ -224,18 +247,13 @@ uint16_t MqttSession::gen_packet_id() {
     return this->session_state.packet_id_gen;
 }
 
-asio::awaitable<void> MqttSession::handle_keep_alive() {
+template <typename SocketType>
+asio::awaitable<void> MqttSession<SocketType>::handle_keep_alive() {
     auto check_duration = std::chrono::seconds(
         MqttConfig::getInstance()->check_timeout_duration());
 
     // 每到一次间隔时间检查一下是否超时
-    while (
-#ifdef MQ_WITH_TLS
-        this->socket.next_layer().is_open()
-#else
-        this->socket.is_open()
-#endif
-    ) {
+    while (this->is_open()) {
         this->keep_alive_timer.expires_after(check_duration);
 
         co_await this->keep_alive_timer.async_wait(asio::use_awaitable);
@@ -246,7 +264,9 @@ asio::awaitable<void> MqttSession::handle_keep_alive() {
     }
 }
 
-void MqttSession::move_session_state(std::shared_ptr<MqttSession> new_session) {
+template <typename SocketType>
+void MqttSession<SocketType>::move_session_state(
+    std::shared_ptr<MqttSession<SocketType>> new_session) {
     // 连接完成标志置为未完成, 这样连接断开后不会再去调用 leave 删除会话
     // 也不会发送遗嘱消息
     this->complete_connect = false;
@@ -265,7 +285,8 @@ void MqttSession::move_session_state(std::shared_ptr<MqttSession> new_session) {
     }
 }
 
-void MqttSession::push_packet(const mqtt_packet_t& packet) {
+template <typename SocketType>
+void MqttSession<SocketType>::push_packet(const mqtt_packet_t& packet) {
     this->session_state.inflight_queue.emplace(packet);
     SPDLOG_DEBUG("push packet: topic_name = [{}], payload = [{}]",
                  *packet.topic_name, *packet.payload);
@@ -274,8 +295,9 @@ void MqttSession::push_packet(const mqtt_packet_t& packet) {
     this->cond_timer.cancel_one();
 }
 
-asio::awaitable<MQTT_RC_CODE> MqttSession::read_byte(uint8_t* addr,
-                                                     bool record_pos) {
+template <typename SocketType>
+asio::awaitable<MQTT_RC_CODE> MqttSession<SocketType>::read_byte(
+    uint8_t* addr, bool record_pos) {
     if (record_pos) {
         if (this->pos + 1 > this->remaining_length) {
             co_return MQTT_RC_CODE::ERR_MALFORMED_PACKET;
@@ -294,8 +316,9 @@ asio::awaitable<MQTT_RC_CODE> MqttSession::read_byte(uint8_t* addr,
     co_return MQTT_RC_CODE::ERR_SUCCESS;
 }
 
-asio::awaitable<MQTT_RC_CODE> MqttSession::read_uint16(uint16_t* addr,
-                                                       bool record_pos) {
+template <typename SocketType>
+asio::awaitable<MQTT_RC_CODE> MqttSession<SocketType>::read_uint16(
+    uint16_t* addr, bool record_pos) {
     uint8_t msb, lsb;
 
     if (record_pos) {
@@ -320,9 +343,9 @@ asio::awaitable<MQTT_RC_CODE> MqttSession::read_uint16(uint16_t* addr,
     co_return MQTT_RC_CODE::ERR_SUCCESS;
 }
 
-asio::awaitable<MQTT_RC_CODE> MqttSession::read_bytes_to_buf(std::string& bytes,
-                                                             uint32_t n,
-                                                             bool record_pos) {
+template <typename SocketType>
+asio::awaitable<MQTT_RC_CODE> MqttSession<SocketType>::read_bytes_to_buf(
+    std::string& bytes, uint32_t n, bool record_pos) {
     if (record_pos) {
         if (this->pos + n > this->remaining_length) {
             co_return MQTT_RC_CODE::ERR_MALFORMED_PACKET;
@@ -348,8 +371,10 @@ asio::awaitable<MQTT_RC_CODE> MqttSession::read_bytes_to_buf(std::string& bytes,
     co_return MQTT_RC_CODE::ERR_SUCCESS;
 }
 
-asio::awaitable<MQTT_RC_CODE> MqttSession::read_uint16_header_length_bytes(
-    std::string& bytes, bool record_pos) {
+template <typename SocketType>
+asio::awaitable<MQTT_RC_CODE>
+MqttSession<SocketType>::read_uint16_header_length_bytes(std::string& bytes,
+                                                         bool record_pos) {
     MQTT_RC_CODE rc;
     uint16_t slen;
 
@@ -383,7 +408,9 @@ asio::awaitable<MQTT_RC_CODE> MqttSession::read_uint16_header_length_bytes(
     co_return rc;
 }
 
-MQTT_RC_CODE MqttSession::check_validate_utf8(const std::string& ustr) {
+template <typename SocketType>
+MQTT_RC_CODE MqttSession<SocketType>::check_validate_utf8(
+    const std::string& ustr) {
     uint32_t len = ustr.length();
     uint32_t i, j, codelen, codepoint;
 
@@ -448,8 +475,9 @@ MQTT_RC_CODE MqttSession::check_validate_utf8(const std::string& ustr) {
     return MQTT_RC_CODE::ERR_SUCCESS;
 }
 
-asio::awaitable<MQTT_RC_CODE> MqttSession::read_utf8_string(std::string& str,
-                                                            bool record_pos) {
+template <typename SocketType>
+asio::awaitable<MQTT_RC_CODE> MqttSession<SocketType>::read_utf8_string(
+    std::string& str, bool record_pos) {
     MQTT_RC_CODE rc;
 
     rc = co_await read_uint16_header_length_bytes(str, record_pos);
@@ -465,7 +493,9 @@ asio::awaitable<MQTT_RC_CODE> MqttSession::read_utf8_string(std::string& str,
     co_return rc;
 }
 
-MQTT_RC_CODE MqttSession::check_sub_topic(const std::string& topic_name) {
+template <typename SocketType>
+MQTT_RC_CODE MqttSession<SocketType>::check_sub_topic(
+    const std::string& topic_name) {
     if (topic_name.empty()) {
         return MQTT_RC_CODE::ERR_SUB_TOPIC_NAME;
     }
@@ -497,7 +527,9 @@ MQTT_RC_CODE MqttSession::check_sub_topic(const std::string& topic_name) {
     return MQTT_RC_CODE::ERR_SUCCESS;
 }
 
-MQTT_RC_CODE MqttSession::check_pub_topic(const std::string& topic_name) {
+template <typename SocketType>
+MQTT_RC_CODE MqttSession<SocketType>::check_pub_topic(
+    const std::string& topic_name) {
     if (topic_name.length() > 65535) {
         return MQTT_RC_CODE::ERR_STR_LENGTH_UTF8;
     }
@@ -512,7 +544,8 @@ MQTT_RC_CODE MqttSession::check_pub_topic(const std::string& topic_name) {
     return MQTT_RC_CODE::ERR_SUCCESS;
 }
 
-asio::awaitable<MQTT_RC_CODE> MqttSession::read_will_packet(
+template <typename SocketType>
+asio::awaitable<MQTT_RC_CODE> MqttSession<SocketType>::read_will_packet(
     mqtt_packet_t& packet, bool record_pos) {
     MQTT_RC_CODE rc;
     std::string will_topic_name;
@@ -550,7 +583,8 @@ asio::awaitable<MQTT_RC_CODE> MqttSession::read_will_packet(
     co_return rc;
 }
 
-asio::awaitable<MQTT_RC_CODE> MqttSession::read_remaining_length() {
+template <typename SocketType>
+asio::awaitable<MQTT_RC_CODE> MqttSession<SocketType>::read_remaining_length() {
     MQTT_RC_CODE rc = MQTT_RC_CODE::ERR_SUCCESS;
 
     uint8_t byte;
@@ -576,7 +610,8 @@ asio::awaitable<MQTT_RC_CODE> MqttSession::read_remaining_length() {
     co_return rc;
 }
 
-MQTT_RC_CODE MqttSession::check_command() {
+template <typename SocketType>
+MQTT_RC_CODE MqttSession<SocketType>::check_command() {
     MQTT_RC_CODE rc = MQTT_RC_CODE::ERR_SUCCESS;
 
     switch (this->command & 0xF0) {
@@ -631,7 +666,8 @@ MQTT_RC_CODE MqttSession::check_command() {
     return rc;
 }
 
-MQTT_RC_CODE MqttSession::check_remaining_length() {
+template <typename SocketType>
+MQTT_RC_CODE MqttSession<SocketType>::check_remaining_length() {
     MQTT_RC_CODE rc = MQTT_RC_CODE::ERR_SUCCESS;
 
     switch (this->command & 0xF0) {
@@ -667,7 +703,8 @@ MQTT_RC_CODE MqttSession::check_remaining_length() {
     return rc;
 }
 
-asio::awaitable<MQTT_RC_CODE> MqttSession::read_fixed_header() {
+template <typename SocketType>
+asio::awaitable<MQTT_RC_CODE> MqttSession<SocketType>::read_fixed_header() {
     MQTT_RC_CODE rc = MQTT_RC_CODE::ERR_SUCCESS;
 
     rc = co_await read_byte(&this->command, false);
@@ -693,8 +730,10 @@ asio::awaitable<MQTT_RC_CODE> MqttSession::read_fixed_header() {
     co_return rc;
 }
 
-MQTT_RC_CODE MqttSession::add_mqtt_fixed_header(std::string& packet,
-                                                uint8_t cmd, uint32_t rlen) {
+template <typename SocketType>
+MQTT_RC_CODE MqttSession<SocketType>::add_mqtt_fixed_header(std::string& packet,
+                                                            uint8_t cmd,
+                                                            uint32_t rlen) {
     uint8_t remaining_bytes[5], byte;
     uint8_t remaining_count = 0;
 
@@ -727,8 +766,9 @@ MQTT_RC_CODE MqttSession::add_mqtt_fixed_header(std::string& packet,
     return MQTT_RC_CODE::ERR_SUCCESS;
 }
 
-asio::awaitable<MQTT_RC_CODE> MqttSession::send_connack(uint8_t ack,
-                                                        uint8_t reason_code) {
+template <typename SocketType>
+asio::awaitable<MQTT_RC_CODE> MqttSession<SocketType>::send_connack(
+    uint8_t ack, uint8_t reason_code) {
     MQTT_RC_CODE rc = MQTT_RC_CODE::ERR_SUCCESS;
 
     SPDLOG_DEBUG("CONNACK: send ack = [X'{:02X}'] reason_code = [X'{:02X}']",
@@ -756,7 +796,8 @@ asio::awaitable<MQTT_RC_CODE> MqttSession::send_connack(uint8_t ack,
     co_return rc;
 }
 
-asio::awaitable<MQTT_RC_CODE> MqttSession::send_suback(
+template <typename SocketType>
+asio::awaitable<MQTT_RC_CODE> MqttSession<SocketType>::send_suback(
     uint16_t packet_id, const std::string& payload) {
     MQTT_RC_CODE rc = MQTT_RC_CODE::ERR_SUCCESS;
 
@@ -786,7 +827,9 @@ asio::awaitable<MQTT_RC_CODE> MqttSession::send_suback(
     co_return rc;
 }
 
-asio::awaitable<MQTT_RC_CODE> MqttSession::send_unsuback(uint16_t packet_id) {
+template <typename SocketType>
+asio::awaitable<MQTT_RC_CODE> MqttSession<SocketType>::send_unsuback(
+    uint16_t packet_id) {
     MQTT_RC_CODE rc;
     std::string packet;
     uint16_t net_packet_id;
@@ -813,7 +856,9 @@ asio::awaitable<MQTT_RC_CODE> MqttSession::send_unsuback(uint16_t packet_id) {
     co_return rc;
 }
 
-asio::awaitable<MQTT_RC_CODE> MqttSession::send_puback(uint16_t packet_id) {
+template <typename SocketType>
+asio::awaitable<MQTT_RC_CODE> MqttSession<SocketType>::send_puback(
+    uint16_t packet_id) {
     MQTT_RC_CODE rc;
     std::string packet;
     uint16_t net_packet_id;
@@ -840,7 +885,9 @@ asio::awaitable<MQTT_RC_CODE> MqttSession::send_puback(uint16_t packet_id) {
     co_return rc;
 }
 
-asio::awaitable<MQTT_RC_CODE> MqttSession::send_pubrec(uint16_t packet_id) {
+template <typename SocketType>
+asio::awaitable<MQTT_RC_CODE> MqttSession<SocketType>::send_pubrec(
+    uint16_t packet_id) {
     MQTT_RC_CODE rc;
     std::string packet;
     uint16_t net_packet_id;
@@ -867,7 +914,9 @@ asio::awaitable<MQTT_RC_CODE> MqttSession::send_pubrec(uint16_t packet_id) {
     co_return rc;
 }
 
-asio::awaitable<MQTT_RC_CODE> MqttSession::send_pubrel(uint16_t packet_id) {
+template <typename SocketType>
+asio::awaitable<MQTT_RC_CODE> MqttSession<SocketType>::send_pubrel(
+    uint16_t packet_id) {
     MQTT_RC_CODE rc;
     std::string packet;
     uint16_t net_packet_id;
@@ -894,7 +943,9 @@ asio::awaitable<MQTT_RC_CODE> MqttSession::send_pubrel(uint16_t packet_id) {
     co_return rc;
 }
 
-asio::awaitable<MQTT_RC_CODE> MqttSession::send_pubcomp(uint16_t packet_id) {
+template <typename SocketType>
+asio::awaitable<MQTT_RC_CODE> MqttSession<SocketType>::send_pubcomp(
+    uint16_t packet_id) {
     MQTT_RC_CODE rc;
     std::string packet;
     uint16_t net_packet_id;
@@ -921,7 +972,8 @@ asio::awaitable<MQTT_RC_CODE> MqttSession::send_pubcomp(uint16_t packet_id) {
     co_return rc;
 }
 
-asio::awaitable<MQTT_RC_CODE> MqttSession::send_pingresp() {
+template <typename SocketType>
+asio::awaitable<MQTT_RC_CODE> MqttSession<SocketType>::send_pingresp() {
     MQTT_RC_CODE rc;
     std::string packet;
 
@@ -943,7 +995,8 @@ asio::awaitable<MQTT_RC_CODE> MqttSession::send_pingresp() {
     co_return rc;
 }
 
-asio::awaitable<void> MqttSession::handle_packet() {
+template <typename SocketType>
+asio::awaitable<void> MqttSession<SocketType>::handle_packet() {
     for (;;) {
         init_buffer();
 
@@ -1001,7 +1054,8 @@ asio::awaitable<void> MqttSession::handle_packet() {
     handle_error_code();
 }
 
-asio::awaitable<MQTT_RC_CODE> MqttSession::handle_connect() {
+template <typename SocketType>
+asio::awaitable<MQTT_RC_CODE> MqttSession<SocketType>::handle_connect() {
     MQTT_RC_CODE rc = MQTT_RC_CODE::ERR_SUCCESS;
     uint16_t protocol_name_length;
     std::string protocol_name;
@@ -1161,7 +1215,20 @@ asio::awaitable<MQTT_RC_CODE> MqttSession::handle_connect() {
         rule.type = MQTT_ACL_TYPE::IPADDR;
         asio::error_code ec;
 
+#ifdef MQ_WITH_TLS
+        if constexpr (std::is_same_v<SocketType, asio::ssl::stream<
+                                                     asio::ip::tcp::socket>>) {
+            rule.object = this->socket.lowest_layer()
+                              .remote_endpoint(ec)
+                              .address()
+                              .to_string();
+        } else {
+            rule.object =
+                this->socket.remote_endpoint(ec).address().to_string();
+        }
+#else
         rule.object = this->socket.remote_endpoint(ec).address().to_string();
+#endif
         if (ec) {
             co_return MQTT_RC_CODE::ERR_NO_CONN;
         }
@@ -1197,7 +1264,7 @@ asio::awaitable<MQTT_RC_CODE> MqttSession::handle_connect() {
     this->session_state.will_topic = will_topic;
 
     // 加入 broker
-    session_present = this->broker.join_or_update(shared_from_this());
+    session_present = this->broker.join_or_update(this->shared_from_this());
 
     // 发送 CONNACK 响应
     rc = co_await send_connack(session_present, MQTT_CONNACK::ACCEPTED);
@@ -1214,7 +1281,7 @@ asio::awaitable<MQTT_RC_CODE> MqttSession::handle_connect() {
     // 开启协程用于处理需要当前会话转发的主题
     asio::co_spawn(
         this->socket.get_executor(),
-        [self = shared_from_this()] {
+        [self = this->shared_from_this()] {
             return self->handle_inflighting_packets();
         },
         asio::detached);
@@ -1222,7 +1289,7 @@ asio::awaitable<MQTT_RC_CODE> MqttSession::handle_connect() {
     // 开启协程用于处理需要等待一段时间的操作
     asio::co_spawn(
         this->socket.get_executor(),
-        [self = shared_from_this()] {
+        [self = this->shared_from_this()] {
             return self->handle_waiting_map_packets();
         },
         asio::detached);
@@ -1234,7 +1301,8 @@ asio::awaitable<MQTT_RC_CODE> MqttSession::handle_connect() {
     co_return MQTT_RC_CODE::ERR_SUCCESS;
 }
 
-asio::awaitable<MQTT_RC_CODE> MqttSession::handle_publish() {
+template <typename SocketType>
+asio::awaitable<MQTT_RC_CODE> MqttSession<SocketType>::handle_publish() {
     MQTT_RC_CODE rc = MQTT_RC_CODE::ERR_SUCCESS;
     mqtt_packet_t pub_packet;
     uint8_t retain = this->command & 0x01;    // 第 0 位 retain
@@ -1358,7 +1426,8 @@ asio::awaitable<MQTT_RC_CODE> MqttSession::handle_publish() {
     co_return rc;
 }
 
-asio::awaitable<MQTT_RC_CODE> MqttSession::handle_puback() {
+template <typename SocketType>
+asio::awaitable<MQTT_RC_CODE> MqttSession<SocketType>::handle_puback() {
     MQTT_RC_CODE rc;
     uint16_t packet_id;
 
@@ -1388,7 +1457,8 @@ asio::awaitable<MQTT_RC_CODE> MqttSession::handle_puback() {
     co_return rc;
 }
 
-asio::awaitable<MQTT_RC_CODE> MqttSession::handle_pubrec() {
+template <typename SocketType>
+asio::awaitable<MQTT_RC_CODE> MqttSession<SocketType>::handle_pubrec() {
     MQTT_RC_CODE rc;
     uint16_t packet_id;
 
@@ -1435,7 +1505,8 @@ asio::awaitable<MQTT_RC_CODE> MqttSession::handle_pubrec() {
     co_return rc;
 }
 
-asio::awaitable<MQTT_RC_CODE> MqttSession::handle_pubrel() {
+template <typename SocketType>
+asio::awaitable<MQTT_RC_CODE> MqttSession<SocketType>::handle_pubrel() {
     MQTT_RC_CODE rc;
     uint16_t packet_id;
 
@@ -1479,7 +1550,8 @@ asio::awaitable<MQTT_RC_CODE> MqttSession::handle_pubrel() {
     co_return rc;
 }
 
-asio::awaitable<MQTT_RC_CODE> MqttSession::handle_pubcomp() {
+template <typename SocketType>
+asio::awaitable<MQTT_RC_CODE> MqttSession<SocketType>::handle_pubcomp() {
     MQTT_RC_CODE rc;
     uint16_t packet_id;
 
@@ -1509,7 +1581,8 @@ asio::awaitable<MQTT_RC_CODE> MqttSession::handle_pubcomp() {
     co_return rc;
 }
 
-asio::awaitable<MQTT_RC_CODE> MqttSession::handle_subscribe() {
+template <typename SocketType>
+asio::awaitable<MQTT_RC_CODE> MqttSession<SocketType>::handle_subscribe() {
     MQTT_RC_CODE rc;
     uint16_t packet_id;
     std::string tmp_topic;
@@ -1584,7 +1657,8 @@ asio::awaitable<MQTT_RC_CODE> MqttSession::handle_subscribe() {
     co_return MQTT_RC_CODE::ERR_SUCCESS;
 }
 
-asio::awaitable<MQTT_RC_CODE> MqttSession::handle_unsubscribe() {
+template <typename SocketType>
+asio::awaitable<MQTT_RC_CODE> MqttSession<SocketType>::handle_unsubscribe() {
     MQTT_RC_CODE rc = MQTT_RC_CODE::ERR_SUCCESS_DISCONNECT;
 
     uint16_t packet_id;
@@ -1617,13 +1691,14 @@ asio::awaitable<MQTT_RC_CODE> MqttSession::handle_unsubscribe() {
     }
 
     if (this->session_state.sub_topic_map.empty()) {
-        MqttSession::active_sub_set.erase(this->client_id);
+        MqttSession<SocketType>::active_sub_set.erase(this->client_id);
     }
 
     co_return rc;
 }
 
-asio::awaitable<MQTT_RC_CODE> MqttSession::handle_pingreq() {
+template <typename SocketType>
+asio::awaitable<MQTT_RC_CODE> MqttSession<SocketType>::handle_pingreq() {
     MQTT_RC_CODE rc;
 
     rc = co_await send_pingresp();
@@ -1634,7 +1709,8 @@ asio::awaitable<MQTT_RC_CODE> MqttSession::handle_pingreq() {
     co_return rc;
 }
 
-asio::awaitable<MQTT_RC_CODE> MqttSession::handle_disconnect() {
+template <typename SocketType>
+asio::awaitable<MQTT_RC_CODE> MqttSession<SocketType>::handle_disconnect() {
     MQTT_RC_CODE rc = MQTT_RC_CODE::ERR_SUCCESS_DISCONNECT;
 
     disconnect();
@@ -1645,20 +1721,15 @@ asio::awaitable<MQTT_RC_CODE> MqttSession::handle_disconnect() {
     co_return rc;
 }
 
-asio::awaitable<void> MqttSession::handle_inflighting_packets() {
+template <typename SocketType>
+asio::awaitable<void> MqttSession<SocketType>::handle_inflighting_packets() {
     MQTT_RC_CODE rc;
     mqtt_packet_t packet;
     uint8_t old_qos;
     std::list<mqtt_packet_t> send_packet_list;
     asio::error_code ec;
 
-    while (
-#ifdef MQ_WITH_TLS
-        this->socket.next_layer().is_open()
-#else
-        this->socket.is_open()
-#endif
-    ) {
+    while (this->is_open()) {
         if (!this->session_state.inflight_queue.empty()) {
             packet = this->session_state.inflight_queue.front();
             this->session_state.inflight_queue.pop();
@@ -1696,19 +1767,14 @@ asio::awaitable<void> MqttSession::handle_inflighting_packets() {
     }
 }
 
-asio::awaitable<void> MqttSession::handle_waiting_map_packets() {
+template <typename SocketType>
+asio::awaitable<void> MqttSession<SocketType>::handle_waiting_map_packets() {
     MQTT_RC_CODE rc;
     auto check_duration = std::chrono::seconds(
         MqttConfig::getInstance()->check_waiting_map_duration());
 
     // 每到一次间隔时间检查一下 waiting
-    while (
-#ifdef MQ_WITH_TLS
-        this->socket.next_layer().is_open()
-#else
-        this->socket.is_open()
-#endif
-    ) {
+    while (this->is_open()) {
         this->check_timer.expires_after(check_duration);
 
         co_await this->check_timer.async_wait(asio::use_awaitable);
@@ -1820,7 +1886,8 @@ asio::awaitable<void> MqttSession::handle_waiting_map_packets() {
     }
 }
 
-asio::awaitable<MQTT_RC_CODE> MqttSession::send_mqtt_packets(
+template <typename SocketType>
+asio::awaitable<MQTT_RC_CODE> MqttSession<SocketType>::send_mqtt_packets(
     const std::list<mqtt_packet_t>& packet_list) {
     MQTT_RC_CODE rc = MQTT_RC_CODE::ERR_SUCCESS;
 
@@ -1854,7 +1921,9 @@ asio::awaitable<MQTT_RC_CODE> MqttSession::send_mqtt_packets(
     co_return rc;
 }
 
-asio::awaitable<void> MqttSession::send_publish_qos0(mqtt_packet_t packet) {
+template <typename SocketType>
+asio::awaitable<void> MqttSession<SocketType>::send_publish_qos0(
+    mqtt_packet_t packet) {
     MQTT_RC_CODE rc;
     std::string header;
     uint8_t dup = packet.dup;
@@ -1894,7 +1963,8 @@ asio::awaitable<void> MqttSession::send_publish_qos0(mqtt_packet_t packet) {
     }
 }
 
-asio::awaitable<MQTT_RC_CODE> MqttSession::send_publish_qos1(
+template <typename SocketType>
+asio::awaitable<MQTT_RC_CODE> MqttSession<SocketType>::send_publish_qos1(
     mqtt_packet_t packet, bool is_new) {
     MQTT_RC_CODE rc;
     std::string header;
@@ -1959,7 +2029,8 @@ asio::awaitable<MQTT_RC_CODE> MqttSession::send_publish_qos1(
     co_return rc;
 }
 
-asio::awaitable<MQTT_RC_CODE> MqttSession::send_publish_qos2(
+template <typename SocketType>
+asio::awaitable<MQTT_RC_CODE> MqttSession<SocketType>::send_publish_qos2(
     mqtt_packet_t packet, bool is_new) {
     MQTT_RC_CODE rc;
     std::string header;
@@ -2024,7 +2095,8 @@ asio::awaitable<MQTT_RC_CODE> MqttSession::send_publish_qos2(
     co_return rc;
 }
 
-void MqttSession::add_subscribe(
+template <typename SocketType>
+void MqttSession<SocketType>::add_subscribe(
     const std::list<std::pair<std::string, uint8_t>>& sub_topic_list) {
     if (sub_topic_list.empty()) {
         return;
@@ -2040,6 +2112,20 @@ void MqttSession::add_subscribe(
         this->session_state.sub_topic_map[name] = qos;
 
         // 获取保留消息, 只针对当前新增的主题
-        this->broker.get_retain(shared_from_this(), name);
+        this->broker.get_retain(this->shared_from_this(), name);
     }
+}
+
+template <typename SocketType>
+bool MqttSession<SocketType>::is_open() {
+#ifdef MQ_WITH_TLS
+    if constexpr (std::is_same_v<SocketType,
+                                 asio::ssl::stream<asio::ip::tcp::socket>>) {
+        return this->socket.next_layer().is_open();
+    } else {
+        return this->socket.is_open();
+    }
+#else
+    return this->socket.is_open();
+#endif
 }

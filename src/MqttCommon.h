@@ -7,6 +7,7 @@
 #include <string>
 #include <memory>
 #include <chrono>
+#include <type_traits>
 #include <unordered_set>
 #include <unordered_map>
 
@@ -21,6 +22,12 @@
 
 #include "MqttLogger.h"
 
+enum class MQTT_PROTOCOL: uint8_t {
+    MQTT,
+    MQTTS,
+    WS,
+    WSS,
+};
 
 enum class MQTT_MSG_STATE: uint8_t {
     INVALID = 0,
@@ -149,6 +156,34 @@ struct mqtt_acl_rule_t {
         mode(MQTT_ACL_MODE::EQ),
         action(MQTT_ACL_ACTION::ALL)
         {}
+};
+
+enum class MQTT_SSL_VERSION: uint8_t {
+    TLSv12,
+    TLSv13,
+};
+
+enum class MQTT_SSL_VERIFY: uint8_t {
+    NONE,
+    PEER,
+};
+
+struct mqtt_ssl_cfg_t {
+    MQTT_SSL_VERSION version;
+    std::string cacertfile;
+    std::string certfile;
+    std::string keyfile;
+    std::string password;
+    MQTT_SSL_VERIFY verify_mode;
+    bool fail_if_no_peer_cert;
+    std::string dhparam;
+};
+
+struct mqtt_listener_cfg_t {
+    MQTT_PROTOCOL proto;
+    std::string address;
+    uint16_t port;
+    mqtt_ssl_cfg_t ssl_cfg;
 };
 
 namespace convert {

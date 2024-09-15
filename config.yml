@@ -1,11 +1,46 @@
+# SSL/TLS 全局配置, 构建启用 MQ_WITH_TLS 时读取
+# 在 listeners 中可以使用特定的配置, 未配置则使用全局配置
+ssl:
+  # TLS 协议版本, 仅支持 tls1.2 和 tls1.3 (默认 tls1.2)
+  version: 'tls1.2'
+
+  # CA 证书, 双向认证时用于验证客户端证书, 单向认证可不配置
+  #cacertfile: '../certs/ca.crt'
+
+  # 服务器证书
+  certfile: '../certs/server.crt'
+
+  # 服务器私钥
+  keyfile: '../certs/server.key'
+
+  # 服务器私钥受密码保护时需要提供密码
+  # password: 'MQTT'
+
+  # 认证模式, 支持单向认证 verify_none 和 双向认证 verify_peer
+  # 默认认证模式为单向认证
+  verify_mode: 'verify_none'
+
+  # 客户端没有证书时, 是否拒绝 SSL/TLS 连接 (默认 false)
+  # 只有开启双向认证时有效, 为 true 表示强制双向认证
+  fail_if_no_peer_cert: false
+
+  # 增强 SSL/TLS 连接的安全性, 可以使用 Diffie-Hellman 密钥交换算法（DH）
+  # 来生成参数 (默认不使用)
+  # dhparam: '../certs/dh4096.pem'
+
+listeners:
+  # 非加密连接
+  - address: 'mqtt://0.0.0.0'
+    port: 1883
+
+  # 加密连接, 未配置专门的证书时取全局配置
+  - address: 'mqtts://0.0.0.0'
+    port: 8883
+    certfile: ''
+    keyfile: ''
+
 # MQTT Server 相关配置
 server:
-  # 监听地址, 支持 IPv6 (默认 0.0.0.0)
-  address: '0.0.0.0'
-
-  # 监听端口 (默认 1883)
-  port: 1883
-
   protocol:
     # CONNECT 阶段的超时时间, 考虑到网络延时实际程序中设置的超时
     # 时间为其 1.5 倍 (默认 10 秒, 为 0 表示不设置超时)
@@ -57,42 +92,6 @@ server:
     #     qos: 1
     #   - topic: 'auto/topic2'
     #     qos: 2
-
-# SSL/TLS 相关配置, 构建启用 MQ_WITH_TLS 时读取
-ssl:
-  # 监听地址
-  address: '0.0.0.0'
-
-  # 监听端口 (默认 8883)
-  port: 8883
-
-  # TLS 协议版本, 仅支持 tls1.2 和 tls1.3 (默认 tls1.2)
-  version: 'tls1.2'
-
-  # CA 证书, 双向认证时用于验证客户端证书, 单向认证可不配置
-  cacertfile: '../certs/ca.crt'
-
-  # 服务器证书
-  certfile: '../certs/server.crt'
-
-  # 服务器私钥
-  keyfile: '../certs/server.key'
-
-  # 服务器私钥受密码保护时需要提供密码
-  # password: 'MQTT'
-
-  # 认证模式, 支持单向认证 verify_none 和 双向认证 verify_peer
-  # 默认认证模式为单向认证
-  verify_mode: 'verify_none'
-
-  # 客户端没有证书时, 是否拒绝 SSL/TLS 连接 (默认 false)
-  # 只有开启双向认证时有效, 为 true 表示强制双向认证
-  fail_if_no_peer_cert: false
-
-  # 增强 SSL/TLS 连接的安全性, 可以使用 Diffie-Hellman 密钥交换算法（DH）
-  # 来生成参数 (默认不使用)
-  # dhparam: '../certs/dh4096.pem'
-
 
 # 日志相关配置
 log:
