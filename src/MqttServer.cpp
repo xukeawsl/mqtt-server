@@ -52,7 +52,7 @@ void MqttServer::init() {
 void MqttServer::stop() { io_context.stop(); }
 
 asio::awaitable<void> MqttServer::handle_accept(
-    asio::ip::tcp::acceptor acceptor, mqtt_listener_cfg_t cfg) {
+    asio::ip::tcp::acceptor acceptor, const mqtt_listener_cfg_t& cfg) {
 #ifdef MQ_WITH_TLS
     if (cfg.proto == MQTT_PROTOCOL::MQTTS) {
         asio::ssl::context ssl_context(asio::ssl::context::tlsv12_server);

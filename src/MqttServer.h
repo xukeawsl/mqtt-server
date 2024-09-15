@@ -17,7 +17,7 @@ private:
 
     void stop();
 
-    asio::awaitable<void> handle_accept(asio::ip::tcp::acceptor acceptor, mqtt_listener_cfg_t cfg);
+    asio::awaitable<void> handle_accept(asio::ip::tcp::acceptor acceptor, const mqtt_listener_cfg_t& cfg);
 
 private:
     asio::io_context io_context;

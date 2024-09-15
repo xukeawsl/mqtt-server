@@ -224,6 +224,8 @@ void MqttConfig::parse_listeners(YAML::Node& node) {
     for (const auto& nodeListener : node) {
         mqtt_listener_cfg_t cfg;
 
+        cfg.ssl_cfg = mqtt_ssl_cfg_t{};
+
         cfg.port = nodeListener["port"].as<uint16_t>();
 
         std::string address = nodeListener["address"].as<std::string>();
