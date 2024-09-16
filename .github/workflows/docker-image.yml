@@ -16,10 +16,10 @@ jobs:
     - uses: actions/checkout@v4
     
     - name: Log in to Docker Hub
-      run: echo "${{ secrets.DOCKER_PASSWORD }}" | docker login --username "${{ secrets.DOCKER_USERNAME }}" --password-stdin
+      run: echo "${{ secrets.DOCKERHUB_PASSWORD }}" | docker login --username "${{ secrets.DOCKERHUB_USERNAME }}" --password-stdin
 
     - name: Build Docker image
-      run: docker build . -f docker/Dockerfile --tag ${{ secrets.DOCKER_USERNAME }}/mqtt-server:latest
+      run: docker build . -f docker/Dockerfile --tag ${{ secrets.DOCKERHUB_USERNAME }}/mqtt-server:latest
 
     - name: Push Docker image to Docker Hub
-      run: docker push ${{ secrets.DOCKER_USERNAME }}/mqtt-server:latest
+      run: docker push ${{ secrets.DOCKERHUB_USERNAME }}/mqtt-server:latest
