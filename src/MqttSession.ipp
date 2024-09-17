@@ -1,3 +1,5 @@
+#include "MqttSession.h"
+
 template <typename SocketType>
 std::unordered_set<std::string> MqttSession<SocketType>::active_sub_set;
 
@@ -112,6 +114,8 @@ void MqttSession<SocketType>::init_buffer() {
     this->pos = 0;
     this->command = 0;
     this->remaining_length = 0;
+    this->payload.clear();
+    this->payload.shrink_to_fit();
 }
 
 template <typename SocketType>
@@ -297,19 +301,23 @@ void MqttSession<SocketType>::push_packet(const mqtt_packet_t& packet) {
 
 template <typename SocketType>
 asio::awaitable<MQTT_RC_CODE> MqttSession<SocketType>::read_byte(
-    uint8_t* addr, bool record_pos) {
-    if (record_pos) {
+    uint8_t* addr, bool read_payload) {
+    asio::error_code ec;
+
+    if (read_payload) {
         if (this->pos + 1 > this->remaining_length) {
             co_return MQTT_RC_CODE::ERR_MALFORMED_PACKET;
         }
 
+        *addr = this->payload[this->pos];
         this->pos += 1;
+
+        co_return MQTT_RC_CODE::ERR_SUCCESS;
     }
 
-    try {
-        co_await async_read(this->socket, asio::buffer(addr, 1),
-                            asio::use_awaitable);
-    } catch (...) {
+    co_await async_read(this->socket, asio::buffer(addr, 1),
+                        asio::redirect_error(asio::use_awaitable, ec));
+    if (ec) {
         co_return MQTT_RC_CODE::ERR_NO_CONN;
     }
 
@@ -318,23 +326,33 @@ asio::awaitable<MQTT_RC_CODE> MqttSession<SocketType>::read_byte(
 
 template <typename SocketType>
 asio::awaitable<MQTT_RC_CODE> MqttSession<SocketType>::read_uint16(
-    uint16_t* addr, bool record_pos) {
+    uint16_t* addr, bool read_payload) {
+    asio::error_code ec;
     uint8_t msb, lsb;
 
-    if (record_pos) {
+    if (read_payload) {
         if (this->pos + 2 > this->remaining_length) {
             co_return MQTT_RC_CODE::ERR_MALFORMED_PACKET;
         }
 
+        msb = this->payload[this->pos];
+        lsb = this->payload[this->pos + 1];
+
+        *addr = static_cast<uint16_t>((msb << 8) + lsb);
+
         this->pos += 2;
+
+        co_return MQTT_RC_CODE::ERR_SUCCESS;
     }
 
-    try {
-        co_await async_read(this->socket, asio::buffer(&msb, 1),
-                            asio::use_awaitable);
-        co_await async_read(this->socket, asio::buffer(&lsb, 1),
-                            asio::use_awaitable);
-    } catch (...) {
+    std::array<asio::mutable_buffer, 2> buf =
+    {
+        {asio::buffer(&msb, sizeof(uint8_t)),
+         asio::buffer(&lsb, sizeof(uint8_t))}
+    };
+
+    co_await async_read(this->socket, buf, asio::redirect_error(asio::use_awaitable, ec));
+    if (ec) {
         co_return MQTT_RC_CODE::ERR_NO_CONN;
     }
 
@@ -345,14 +363,8 @@ asio::awaitable<MQTT_RC_CODE> MqttSession<SocketType>::read_uint16(
 
 template <typename SocketType>
 asio::awaitable<MQTT_RC_CODE> MqttSession<SocketType>::read_bytes_to_buf(
-    std::string& bytes, uint32_t n, bool record_pos) {
-    if (record_pos) {
-        if (this->pos + n > this->remaining_length) {
-            co_return MQTT_RC_CODE::ERR_MALFORMED_PACKET;
-        }
-
-        this->pos += n;
-    }
+    std::string& bytes, uint32_t n, bool read_payload) {
+    asio::error_code ec;
 
     if (n == 0) {
         co_return MQTT_RC_CODE::ERR_SUCCESS;
@@ -360,11 +372,22 @@ asio::awaitable<MQTT_RC_CODE> MqttSession<SocketType>::read_bytes_to_buf(
 
     bytes.resize(n);
 
-    try {
-        co_await async_read(this->socket,
-                            asio::buffer(bytes.data(), bytes.length()),
-                            asio::use_awaitable);
-    } catch (...) {
+    if (read_payload) {
+        if (this->pos + n > this->remaining_length) {
+            co_return MQTT_RC_CODE::ERR_MALFORMED_PACKET;
+        }
+
+        std::memcpy(bytes.data(), this->payload.data() + this->pos, n);
+
+        this->pos += n;
+
+        co_return MQTT_RC_CODE::ERR_SUCCESS;
+    }
+
+    co_await async_read(this->socket,
+                        asio::buffer(bytes.data(), bytes.length()),
+                        asio::redirect_error(asio::use_awaitable, ec));
+    if (ec) {
         co_return MQTT_RC_CODE::ERR_NO_CONN;
     }
 
@@ -374,21 +397,14 @@ asio::awaitable<MQTT_RC_CODE> MqttSession<SocketType>::read_bytes_to_buf(
 template <typename SocketType>
 asio::awaitable<MQTT_RC_CODE>
 MqttSession<SocketType>::read_uint16_header_length_bytes(std::string& bytes,
-                                                         bool record_pos) {
+                                                         bool read_payload) {
+    asio::error_code ec;
     MQTT_RC_CODE rc;
     uint16_t slen;
 
-    rc = co_await read_uint16(&slen, record_pos);
+    rc = co_await read_uint16(&slen, read_payload);
     if (rc != MQTT_RC_CODE::ERR_SUCCESS) {
         co_return rc;
-    }
-
-    if (record_pos) {
-        if (this->pos + slen > this->remaining_length) {
-            co_return MQTT_RC_CODE::ERR_MALFORMED_PACKET;
-        }
-
-        this->pos += slen;
     }
 
     if (slen == 0) {
@@ -397,11 +413,22 @@ MqttSession<SocketType>::read_uint16_header_length_bytes(std::string& bytes,
 
     bytes.resize(slen);
 
-    try {
-        co_await async_read(this->socket,
-                            asio::buffer(bytes.data(), bytes.length()),
-                            asio::use_awaitable);
-    } catch (...) {
+    if (read_payload) {
+        if (this->pos + slen > this->remaining_length) {
+            co_return MQTT_RC_CODE::ERR_MALFORMED_PACKET;
+        }
+
+        std::memcpy(bytes.data(), this->payload.data() + this->pos, slen);
+
+        this->pos += slen;
+        co_return MQTT_RC_CODE::ERR_SUCCESS;
+    }
+    
+    co_await async_read(this->socket,
+                        asio::buffer(bytes.data(), bytes.length()),
+                        asio::redirect_error(asio::use_awaitable, ec));
+    
+    if (ec) {
         co_return MQTT_RC_CODE::ERR_NO_CONN;
     }
 
@@ -477,10 +504,10 @@ MQTT_RC_CODE MqttSession<SocketType>::check_validate_utf8(
 
 template <typename SocketType>
 asio::awaitable<MQTT_RC_CODE> MqttSession<SocketType>::read_utf8_string(
-    std::string& str, bool record_pos) {
+    std::string& str, bool read_payload) {
     MQTT_RC_CODE rc;
 
-    rc = co_await read_uint16_header_length_bytes(str, record_pos);
+    rc = co_await read_uint16_header_length_bytes(str, read_payload);
     if (rc != MQTT_RC_CODE::ERR_SUCCESS) {
         co_return rc;
     }
@@ -546,13 +573,13 @@ MQTT_RC_CODE MqttSession<SocketType>::check_pub_topic(
 
 template <typename SocketType>
 asio::awaitable<MQTT_RC_CODE> MqttSession<SocketType>::read_will_packet(
-    mqtt_packet_t& packet, bool record_pos) {
+    mqtt_packet_t& packet, bool read_payload) {
     MQTT_RC_CODE rc;
     std::string will_topic_name;
     std::string will_payload;
     uint16_t will_payloadlen;
 
-    rc = co_await read_utf8_string(will_topic_name, record_pos);
+    rc = co_await read_utf8_string(will_topic_name, read_payload);
     if (rc != MQTT_RC_CODE::ERR_SUCCESS) {
         co_return rc;
     }
@@ -562,14 +589,14 @@ asio::awaitable<MQTT_RC_CODE> MqttSession<SocketType>::read_will_packet(
         co_return rc;
     }
 
-    rc = co_await read_uint16(&will_payloadlen, record_pos);
+    rc = co_await read_uint16(&will_payloadlen, read_payload);
     if (rc != MQTT_RC_CODE::ERR_SUCCESS) {
         co_return rc;
     }
 
     if (will_payloadlen > 0) {
         rc = co_await read_bytes_to_buf(will_payload, will_payloadlen,
-                                        record_pos);
+                                        read_payload);
         if (rc != MQTT_RC_CODE::ERR_SUCCESS) {
             co_return rc;
         }
@@ -769,6 +796,7 @@ MQTT_RC_CODE MqttSession<SocketType>::add_mqtt_fixed_header(std::string& packet,
 template <typename SocketType>
 asio::awaitable<MQTT_RC_CODE> MqttSession<SocketType>::send_connack(
     uint8_t ack, uint8_t reason_code) {
+    asio::error_code ec;
     MQTT_RC_CODE rc = MQTT_RC_CODE::ERR_SUCCESS;
 
     SPDLOG_DEBUG("CONNACK: send ack = [X'{:02X}'] reason_code = [X'{:02X}']",
@@ -787,9 +815,9 @@ asio::awaitable<MQTT_RC_CODE> MqttSession<SocketType>::send_connack(
          asio::buffer(&ack, sizeof(uint8_t)),
          asio::buffer(&reason_code, sizeof(uint8_t))}};
 
-    try {
-        co_await async_write(socket, buf, asio::use_awaitable);
-    } catch (...) {
+    
+    co_await async_write(socket, buf, asio::redirect_error(asio::use_awaitable, ec));
+    if (ec) {
         co_return MQTT_RC_CODE::ERR_NO_CONN;
     }
 
@@ -799,6 +827,7 @@ asio::awaitable<MQTT_RC_CODE> MqttSession<SocketType>::send_connack(
 template <typename SocketType>
 asio::awaitable<MQTT_RC_CODE> MqttSession<SocketType>::send_suback(
     uint16_t packet_id, const std::string& payload) {
+    asio::error_code ec;
     MQTT_RC_CODE rc = MQTT_RC_CODE::ERR_SUCCESS;
 
     std::string packet;
@@ -816,9 +845,9 @@ asio::awaitable<MQTT_RC_CODE> MqttSession<SocketType>::send_suback(
          asio::buffer(&net_packet_id, sizeof(uint16_t)),
          asio::buffer(payload.data(), payload.length())}};
 
-    try {
-        co_await async_write(this->socket, buf, asio::use_awaitable);
-    } catch (...) {
+    
+    co_await async_write(this->socket, buf, asio::redirect_error(asio::use_awaitable, ec));
+    if (ec) {
         co_return MQTT_RC_CODE::ERR_NO_CONN;
     }
 
@@ -830,6 +859,7 @@ asio::awaitable<MQTT_RC_CODE> MqttSession<SocketType>::send_suback(
 template <typename SocketType>
 asio::awaitable<MQTT_RC_CODE> MqttSession<SocketType>::send_unsuback(
     uint16_t packet_id) {
+    asio::error_code ec;
     MQTT_RC_CODE rc;
     std::string packet;
     uint16_t net_packet_id;
@@ -845,9 +875,9 @@ asio::awaitable<MQTT_RC_CODE> MqttSession<SocketType>::send_unsuback(
         {asio::buffer(packet.data(), packet.length()),
          asio::buffer(&net_packet_id, sizeof(uint16_t))}};
 
-    try {
-        co_await async_write(this->socket, buf, asio::use_awaitable);
-    } catch (...) {
+    
+    co_await async_write(this->socket, buf, asio::redirect_error(asio::use_awaitable, ec));
+    if (ec) {
         co_return MQTT_RC_CODE::ERR_NO_CONN;
     }
 
@@ -859,6 +889,7 @@ asio::awaitable<MQTT_RC_CODE> MqttSession<SocketType>::send_unsuback(
 template <typename SocketType>
 asio::awaitable<MQTT_RC_CODE> MqttSession<SocketType>::send_puback(
     uint16_t packet_id) {
+    asio::error_code ec;
     MQTT_RC_CODE rc;
     std::string packet;
     uint16_t net_packet_id;
@@ -874,9 +905,9 @@ asio::awaitable<MQTT_RC_CODE> MqttSession<SocketType>::send_puback(
         {asio::buffer(packet.data(), packet.length()),
          asio::buffer(&net_packet_id, sizeof(uint16_t))}};
 
-    try {
-        co_await async_write(this->socket, buf, asio::use_awaitable);
-    } catch (...) {
+    
+    co_await async_write(this->socket, buf, asio::redirect_error(asio::use_awaitable, ec));
+    if (ec) {
         co_return MQTT_RC_CODE::ERR_NO_CONN;
     }
 
@@ -888,6 +919,7 @@ asio::awaitable<MQTT_RC_CODE> MqttSession<SocketType>::send_puback(
 template <typename SocketType>
 asio::awaitable<MQTT_RC_CODE> MqttSession<SocketType>::send_pubrec(
     uint16_t packet_id) {
+    asio::error_code ec;
     MQTT_RC_CODE rc;
     std::string packet;
     uint16_t net_packet_id;
@@ -903,9 +935,9 @@ asio::awaitable<MQTT_RC_CODE> MqttSession<SocketType>::send_pubrec(
         {asio::buffer(packet.data(), packet.length()),
          asio::buffer(&net_packet_id, sizeof(uint16_t))}};
 
-    try {
-        co_await async_write(this->socket, buf, asio::use_awaitable);
-    } catch (...) {
+    
+    co_await async_write(this->socket, buf, asio::redirect_error(asio::use_awaitable, ec));
+    if (ec) {
         co_return MQTT_RC_CODE::ERR_NO_CONN;
     }
 
@@ -917,6 +949,7 @@ asio::awaitable<MQTT_RC_CODE> MqttSession<SocketType>::send_pubrec(
 template <typename SocketType>
 asio::awaitable<MQTT_RC_CODE> MqttSession<SocketType>::send_pubrel(
     uint16_t packet_id) {
+    asio::error_code ec;
     MQTT_RC_CODE rc;
     std::string packet;
     uint16_t net_packet_id;
@@ -932,9 +965,8 @@ asio::awaitable<MQTT_RC_CODE> MqttSession<SocketType>::send_pubrel(
         {asio::buffer(packet.data(), packet.length()),
          asio::buffer(&net_packet_id, sizeof(uint16_t))}};
 
-    try {
-        co_await async_write(this->socket, buf, asio::use_awaitable);
-    } catch (...) {
+    co_await async_write(this->socket, buf, asio::redirect_error(asio::use_awaitable, ec));
+    if (ec) {
         co_return MQTT_RC_CODE::ERR_NO_CONN;
     }
 
@@ -946,6 +978,7 @@ asio::awaitable<MQTT_RC_CODE> MqttSession<SocketType>::send_pubrel(
 template <typename SocketType>
 asio::awaitable<MQTT_RC_CODE> MqttSession<SocketType>::send_pubcomp(
     uint16_t packet_id) {
+    asio::error_code ec;
     MQTT_RC_CODE rc;
     std::string packet;
     uint16_t net_packet_id;
@@ -961,9 +994,8 @@ asio::awaitable<MQTT_RC_CODE> MqttSession<SocketType>::send_pubcomp(
         {asio::buffer(packet.data(), packet.length()),
          asio::buffer(&net_packet_id, sizeof(uint16_t))}};
 
-    try {
-        co_await async_write(this->socket, buf, asio::use_awaitable);
-    } catch (...) {
+    co_await async_write(this->socket, buf, asio::redirect_error(asio::use_awaitable, ec));
+    if (ec) {
         co_return MQTT_RC_CODE::ERR_NO_CONN;
     }
 
@@ -974,6 +1006,7 @@ asio::awaitable<MQTT_RC_CODE> MqttSession<SocketType>::send_pubcomp(
 
 template <typename SocketType>
 asio::awaitable<MQTT_RC_CODE> MqttSession<SocketType>::send_pingresp() {
+    asio::error_code ec;
     MQTT_RC_CODE rc;
     std::string packet;
 
@@ -982,11 +1015,10 @@ asio::awaitable<MQTT_RC_CODE> MqttSession<SocketType>::send_pingresp() {
         co_return rc;
     }
 
-    try {
-        co_await async_write(this->socket,
+    co_await async_write(this->socket,
                              asio::buffer(packet.data(), packet.length()),
-                             asio::use_awaitable);
-    } catch (...) {
+                             asio::redirect_error(asio::use_awaitable, ec));
+    if (ec) {
         co_return MQTT_RC_CODE::ERR_NO_CONN;
     }
 
@@ -1003,6 +1035,11 @@ asio::awaitable<void> MqttSession<SocketType>::handle_packet() {
         flush_deadline();
 
         this->rc = co_await read_fixed_header();
+        if (this->rc != MQTT_RC_CODE::ERR_SUCCESS) {
+            break;
+        }
+
+        this->rc = co_await read_bytes_to_buf(this->payload, this->remaining_length, false);
         if (this->rc != MQTT_RC_CODE::ERR_SUCCESS) {
             break;
         }
@@ -1922,8 +1959,8 @@ asio::awaitable<MQTT_RC_CODE> MqttSession<SocketType>::send_mqtt_packets(
 }
 
 template <typename SocketType>
-asio::awaitable<void> MqttSession<SocketType>::send_publish_qos0(
-    mqtt_packet_t packet) {
+asio::awaitable<void> MqttSession<SocketType>::send_publish_qos0(mqtt_packet_t packet) {
+    asio::error_code ec;
     MQTT_RC_CODE rc;
     std::string header;
     uint8_t dup = packet.dup;
@@ -1955,17 +1992,17 @@ asio::awaitable<void> MqttSession<SocketType>::send_publish_qos0(
          asio::buffer(topic_name.data(), topic_name.length()),
          asio::buffer(payload.data(), payload.length())}};
 
-    try {
-        co_await async_write(this->socket, buf, asio::use_awaitable);
-    } catch (...) {
+    
+    co_await async_write(this->socket, buf, asio::redirect_error(asio::use_awaitable, ec));
+    if (ec) {
         SPDLOG_WARN("Failed to publish topic = [{}]", std::string(topic_name));
         co_return;
     }
 }
 
 template <typename SocketType>
-asio::awaitable<MQTT_RC_CODE> MqttSession<SocketType>::send_publish_qos1(
-    mqtt_packet_t packet, bool is_new) {
+asio::awaitable<MQTT_RC_CODE> MqttSession<SocketType>::send_publish_qos1(mqtt_packet_t packet, bool is_new) {
+    asio::error_code ec;
     MQTT_RC_CODE rc;
     std::string header;
     uint8_t dup = packet.dup;
@@ -2019,9 +2056,9 @@ asio::awaitable<MQTT_RC_CODE> MqttSession<SocketType>::send_publish_qos1(
          asio::buffer(&packet_id, sizeof(uint16_t)),
          asio::buffer(payload.data(), payload.length())}};
 
-    try {
-        co_await async_write(this->socket, buf, asio::use_awaitable);
-    } catch (...) {
+    
+    co_await async_write(this->socket, buf, asio::redirect_error(asio::use_awaitable, ec));
+    if (ec) {
         SPDLOG_WARN("Failed to publish topic = [{}]", std::string(topic_name));
         co_return MQTT_RC_CODE::ERR_NO_CONN;
     }
@@ -2030,8 +2067,8 @@ asio::awaitable<MQTT_RC_CODE> MqttSession<SocketType>::send_publish_qos1(
 }
 
 template <typename SocketType>
-asio::awaitable<MQTT_RC_CODE> MqttSession<SocketType>::send_publish_qos2(
-    mqtt_packet_t packet, bool is_new) {
+asio::awaitable<MQTT_RC_CODE> MqttSession<SocketType>::send_publish_qos2(mqtt_packet_t packet, bool is_new) {
+    asio::error_code ec;
     MQTT_RC_CODE rc;
     std::string header;
     uint8_t dup = packet.dup;
@@ -2085,9 +2122,9 @@ asio::awaitable<MQTT_RC_CODE> MqttSession<SocketType>::send_publish_qos2(
          asio::buffer(&packet_id, sizeof(uint16_t)),
          asio::buffer(payload.data(), payload.length())}};
 
-    try {
-        co_await async_write(this->socket, buf, asio::use_awaitable);
-    } catch (...) {
+    
+    co_await async_write(this->socket, buf, asio::redirect_error(asio::use_awaitable, ec));
+    if (ec) {
         SPDLOG_WARN("Failed to publish topic = [{}]", std::string(topic_name));
         co_return MQTT_RC_CODE::ERR_NO_CONN;
     }

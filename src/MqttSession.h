@@ -64,17 +64,17 @@ private:
 
     asio::awaitable<MQTT_RC_CODE> handle_disconnect();
 
-    asio::awaitable<MQTT_RC_CODE> read_byte(uint8_t* addr, bool record_pos);
+    asio::awaitable<MQTT_RC_CODE> read_byte(uint8_t* addr, bool read_payload);
 
-    asio::awaitable<MQTT_RC_CODE> read_uint16(uint16_t* addr, bool record_pos);
+    asio::awaitable<MQTT_RC_CODE> read_uint16(uint16_t* addr, bool read_payload);
 
-    asio::awaitable<MQTT_RC_CODE> read_bytes_to_buf(std::string& bytes, uint32_t n, bool record_pos);
+    asio::awaitable<MQTT_RC_CODE> read_bytes_to_buf(std::string& bytes, uint32_t n, bool read_payload);
 
-    asio::awaitable<MQTT_RC_CODE> read_uint16_header_length_bytes(std::string& bytes, bool record_pos);
+    asio::awaitable<MQTT_RC_CODE> read_uint16_header_length_bytes(std::string& bytes, bool read_payload);
 
-    asio::awaitable<MQTT_RC_CODE> read_utf8_string(std::string& str, bool record_pos);
+    asio::awaitable<MQTT_RC_CODE> read_utf8_string(std::string& str, bool read_payload);
 
-    asio::awaitable<MQTT_RC_CODE> read_will_packet(mqtt_packet_t& packet, bool record_pos);
+    asio::awaitable<MQTT_RC_CODE> read_will_packet(mqtt_packet_t& packet, bool read_payload);
 
     MQTT_RC_CODE add_mqtt_fixed_header(std::string& packet, uint8_t cmd, uint32_t remaining_length);
 
@@ -147,6 +147,7 @@ private:
     uint8_t command;
     uint32_t pos;
     uint32_t remaining_length;
+    std::string payload;
     std::chrono::steady_clock::time_point deadline;
 };
 

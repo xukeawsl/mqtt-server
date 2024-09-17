@@ -1,3 +1,5 @@
+#include "MqttBroker.h"
+
 template <typename SocketType, typename SslSocketType>
 MqttBroker<SocketType, SslSocketType>::MqttBroker() : gen_sid_counter(0) {}
 

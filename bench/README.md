@@ -43,14 +43,14 @@ Total Bandwidth (msg/sec):   6704.350
 # mqtt-server
 ========= TOTAL (10000) =========
 Total Ratio:                 1.000 (10000/10000)
-Total Runtime (sec):         3.234
-Average Runtime (sec):       1.157
-Msg time min (ms):           0.010
-Msg time max (ms):           67.487
-Msg time mean mean (ms):     0.185
-Msg time mean std (ms):      2.405
-Average Bandwidth (msg/sec): 0.869
-Total Bandwidth (msg/sec):   8685.407
+Total Runtime (sec):         2.204
+Average Runtime (sec):       1.179
+Msg time min (ms):           0.011
+Msg time max (ms):           76.904
+Msg time mean mean (ms):     0.118
+Msg time mean std (ms):      1.721
+Average Bandwidth (msg/sec): 0.857
+Total Bandwidth (msg/sec):   8571.362
 ```
 
 * C15k
@@ -73,14 +73,14 @@ Total Bandwidth (msg/sec):   5278.151
 # mqtt-server
 ========= TOTAL (15000) =========
 Total Ratio:                 1.000 (15000/15000)
-Total Runtime (sec):         6.055
-Average Runtime (sec):       1.232
-Msg time min (ms):           0.010
-Msg time max (ms):           54.297
-Msg time mean mean (ms):     0.125
-Msg time mean std (ms):      1.438
-Average Bandwidth (msg/sec): 0.829
-Total Bandwidth (msg/sec):   12433.813
+Total Runtime (sec):         4.170
+Average Runtime (sec):       1.206
+Msg time min (ms):           0.011
+Msg time max (ms):           203.283
+Msg time mean mean (ms):     0.573
+Msg time mean std (ms):      7.714
+Average Bandwidth (msg/sec): 0.847
+Total Bandwidth (msg/sec):   12709.948
 ```
 
 * C20k
@@ -93,14 +93,14 @@ Total Bandwidth (msg/sec):   12433.813
 # mqtt-server
 ========= TOTAL (20000) =========
 Total Ratio:                 1.000 (20000/20000)
-Total Runtime (sec):         19.900
-Average Runtime (sec):       2.109
+Total Runtime (sec):         10.263
+Average Runtime (sec):       1.795
 Msg time min (ms):           0.010
-Msg time max (ms):           1171.341
-Msg time mean mean (ms):     0.345
-Msg time mean std (ms):      12.389
-Average Bandwidth (msg/sec): 0.668
-Total Bandwidth (msg/sec):   13365.305
+Msg time max (ms):           151.841
+Msg time mean mean (ms):     0.175
+Msg time mean std (ms):      2.507
+Average Bandwidth (msg/sec): 0.684
+Total Bandwidth (msg/sec):   13687.076
 ```
 
 ### 2. 负载测试
@@ -110,10 +110,10 @@ Total Bandwidth (msg/sec):   13365.305
 * 单包 1MB 负载, 发送总量 1000MB
 
 ```bash
-./mqtt-benchmark --broker tcp://127.0.0.1:18833 --count 1 --size 1048576 --clients 1000 --qos 0 --format text
+./mqtt-benchmark --broker tcp://127.0.0.1:1883 --count 1 --size 1048576 --clients 1000 --qos 0 --format text
 
-# mqtt-server 启动时内存占用 0.2% (约 8M)
-# mqtt-server 峰值内存占用 18% (约 720M), 处理完后降低至 4% (约 160M)
+# mqtt-server 启动时内存占用 0.2% (不超过 8M)
+# mqtt-server 峰值内存占用 21% (约 872M), 处理完后降低至 3% (约 30M)
 # 处理完高负载后, 由于服务器哈希表容器不会自动缩容, 内存占用会较刚启动时高, 属于
 # 正常情况, 这样在连续处理高负载请求时能够节省重复扩容的开销
 ```
