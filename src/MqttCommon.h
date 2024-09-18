@@ -7,10 +7,12 @@
 #include <string>
 #include <memory>
 #include <chrono>
+#include <string_view>
 #include <type_traits>
 #include <unordered_set>
 #include <unordered_map>
 
+#include "sha1.hpp"
 #include "asio.hpp"
 #include "asio/experimental/channel.hpp"
 

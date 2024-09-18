@@ -29,15 +29,24 @@ ssl:
   # dhparam: '../certs/dh4096.pem'
 
 listeners:
-  # 非加密连接
+  # 非加密 tcp 连接
   - address: 'mqtt://0.0.0.0'
     port: 1883
 
-  # 加密连接, 未配置专门的证书时取全局配置
+  # 加密 tcp 连接, 未配置专门的证书时取全局配置
   - address: 'mqtts://0.0.0.0'
     port: 8883
     certfile: ''
     keyfile: ''
+
+  # 非加密 websocket 连接
+  - address: 'ws://0.0.0.0'
+    port: 8083
+
+  # 加密 websocket 连接, 配置一个指定的 TLS 版本
+  - address: 'wss://0.0.0.0'
+    port: 18833
+    version: 'tls1.3'
 
 # MQTT Server 相关配置
 server:

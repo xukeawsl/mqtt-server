@@ -1,5 +1,7 @@
 #include "MqttServer.h"
 
+#include "MqttSession.h"
+
 MqttServer::MqttServer() : io_context(1), signals(io_context) {}
 
 MqttServer::~MqttServer() {
@@ -29,7 +31,8 @@ void MqttServer::init() {
     signals.async_wait(std::bind(&MqttServer::stop, this));
 
     for (const auto& cfg : MqttConfig::getInstance()->listeners()) {
-        if (cfg.proto == MQTT_PROTOCOL::MQTTS) {
+        if (cfg.proto == MQTT_PROTOCOL::MQTTS ||
+            cfg.proto == MQTT_PROTOCOL::WSS) {
 #ifndef MQ_WITH_TLS
             continue;
 #endif
@@ -53,8 +56,11 @@ void MqttServer::stop() { io_context.stop(); }
 
 asio::awaitable<void> MqttServer::handle_accept(
     asio::ip::tcp::acceptor acceptor, const mqtt_listener_cfg_t& cfg) {
+    bool is_websocket =
+        (cfg.proto == MQTT_PROTOCOL::WS || cfg.proto == MQTT_PROTOCOL::WSS);
+
 #ifdef MQ_WITH_TLS
-    if (cfg.proto == MQTT_PROTOCOL::MQTTS) {
+    if (cfg.proto == MQTT_PROTOCOL::MQTTS || cfg.proto == MQTT_PROTOCOL::WSS) {
         asio::ssl::context ssl_context(asio::ssl::context::tlsv12_server);
 
         if (cfg.ssl_cfg.version == MQTT_SSL_VERSION::TLSv13) {
@@ -113,21 +119,23 @@ asio::awaitable<void> MqttServer::handle_accept(
                                            asio::use_awaitable);
             std::make_shared<
                 MqttSession<asio::ssl::stream<asio::ip::tcp::socket>>>(
-                std::move(ssl_socket), broker)
+                std::move(ssl_socket), is_websocket, broker)
                 ->start();
         }
 
     } else {
         for (;;) {
             std::make_shared<MqttSession<asio::ip::tcp::socket>>(
-                co_await acceptor.async_accept(asio::use_awaitable), broker)
+                co_await acceptor.async_accept(asio::use_awaitable),
+                is_websocket, broker)
                 ->start();
         }
     }
 #else
     for (;;) {
         std::make_shared<MqttSession<asio::ip::tcp::socket>>(
-            co_await acceptor.async_accept(asio::use_awaitable), broker)
+            co_await acceptor.async_accept(asio::use_awaitable), is_websocket,
+            broker)
             ->start();
     }
 #endif

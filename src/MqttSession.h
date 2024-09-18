@@ -3,14 +3,17 @@
 #include "MqttBroker.h"
 #include "MqttConfig.h"
 #include "MqttSessionState.h"
+#include "MqttUtils.h"
+#include "picohttpparser.h"
+#include "MqttWebSocket.h"
 
 template <typename SocketType>
 class MqttSession: public std::enable_shared_from_this<MqttSession<SocketType>> {
 public:
 #ifdef MQ_WITH_TLS
-    MqttSession(SocketType client_socket, MqttBroker<asio::ip::tcp::socket, asio::ssl::stream<asio::ip::tcp::socket>>& mqtt_broker);
+    MqttSession(SocketType socket, bool is_websocket, MqttBroker<asio::ip::tcp::socket, asio::ssl::stream<asio::ip::tcp::socket>>& mqtt_broker);
 #else
-    MqttSession(SocketType client_socket, MqttBroker<asio::ip::tcp::socket>& mqtt_broker);
+    MqttSession(SocketType socket, bool is_websocket, MqttBroker<asio::ip::tcp::socket>& mqtt_broker);
 #endif
 
     ~MqttSession();
@@ -25,7 +28,7 @@ public:
 
 private:
 #ifdef MQ_WITH_TLS
-    asio::awaitable<void> handle_handshake();
+    asio::awaitable<void> handle_ssl_handshake();
 #endif
 
     void handle_session();
@@ -43,6 +46,15 @@ private:
     asio::awaitable<void> handle_keep_alive();
 
     asio::awaitable<void> handle_packet();
+
+    asio::awaitable<MQTT_RC_CODE> handle_websocket_handshake();
+
+    asio::awaitable<MQTT_RC_CODE> read_websocket();
+
+    asio::awaitable<MQTT_RC_CODE> write_websocket(std::string_view msg, opcode op = opcode::binary, bool eof = true);
+
+    template <std::size_t N>
+    asio::awaitable<MQTT_RC_CODE> write_websocket(std::array<asio::const_buffer, N> msg, opcode op = opcode::binary, bool eof = true);
 
     asio::awaitable<MQTT_RC_CODE> handle_connect();
 
@@ -130,6 +142,9 @@ public:
 
 private:
     SocketType socket;
+    bool is_websocket;
+    asio::streambuf head_buf;
+    MqttWebSocket ws;
     std::string username;
     std::string client_id;
 #ifdef MQ_WITH_TLS

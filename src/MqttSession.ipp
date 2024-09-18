@@ -1,11 +1,25 @@
 #include "MqttSession.h"
 
+using namespace std::string_view_literals;
+
+static bool tolower_equal(std::string_view a, std::string_view b) {
+    return std::equal(a.begin(), a.end(), b.begin(), b.end(),
+                      [](char a, char b) { return tolower(a) == tolower(b); });
+}
+
+static std::string_view trim_sv(std::string_view v) {
+    v.remove_prefix((std::min)(v.find_first_not_of(" "), v.size()));
+    v.remove_suffix(
+        (std::min)(v.size() - v.find_last_not_of(" ") - 1, v.size()));
+    return v;
+}
+
 template <typename SocketType>
 std::unordered_set<std::string> MqttSession<SocketType>::active_sub_set;
 
 template <typename SocketType>
 MqttSession<SocketType>::MqttSession(
-    SocketType client_socket,
+    SocketType socket, bool is_websocket,
 #ifdef MQ_WITH_TLS
     MqttBroker<asio::ip::tcp::socket, asio::ssl::stream<asio::ip::tcp::socket>>&
         mqtt_broker
@@ -13,7 +27,8 @@ MqttSession<SocketType>::MqttSession(
     MqttBroker<asio::ip::tcp::socket>& mqtt_broker
 #endif
     )
-    : socket(std::move(client_socket)),
+    : socket(std::move(socket)),
+      is_websocket(is_websocket),
       broker(mqtt_broker),
       cond_timer(socket.get_executor()),
       keep_alive_timer(socket.get_executor()),
@@ -41,7 +56,7 @@ void MqttSession<SocketType>::start() {
         asio::co_spawn(
             socket.get_executor(),
             [self = this->shared_from_this()] {
-                return self->handle_handshake();
+                return self->handle_ssl_handshake();
             },
             asio::detached);
     } else {
@@ -71,7 +86,7 @@ void MqttSession<SocketType>::handle_session() {
 
 #ifdef MQ_WITH_TLS
 template <typename SocketType>
-asio::awaitable<void> MqttSession<SocketType>::handle_handshake() {
+asio::awaitable<void> MqttSession<SocketType>::handle_ssl_handshake() {
     try {
         co_await socket.async_handshake(asio::ssl::stream_base::server,
                                         asio::use_awaitable);
@@ -345,13 +360,12 @@ asio::awaitable<MQTT_RC_CODE> MqttSession<SocketType>::read_uint16(
         co_return MQTT_RC_CODE::ERR_SUCCESS;
     }
 
-    std::array<asio::mutable_buffer, 2> buf =
-    {
+    std::array<asio::mutable_buffer, 2> buf = {
         {asio::buffer(&msb, sizeof(uint8_t)),
-         asio::buffer(&lsb, sizeof(uint8_t))}
-    };
+         asio::buffer(&lsb, sizeof(uint8_t))}};
 
-    co_await async_read(this->socket, buf, asio::redirect_error(asio::use_awaitable, ec));
+    co_await async_read(this->socket, buf,
+                        asio::redirect_error(asio::use_awaitable, ec));
     if (ec) {
         co_return MQTT_RC_CODE::ERR_NO_CONN;
     }
@@ -423,11 +437,11 @@ MqttSession<SocketType>::read_uint16_header_length_bytes(std::string& bytes,
         this->pos += slen;
         co_return MQTT_RC_CODE::ERR_SUCCESS;
     }
-    
+
     co_await async_read(this->socket,
                         asio::buffer(bytes.data(), bytes.length()),
                         asio::redirect_error(asio::use_awaitable, ec));
-    
+
     if (ec) {
         co_return MQTT_RC_CODE::ERR_NO_CONN;
     }
@@ -815,10 +829,17 @@ asio::awaitable<MQTT_RC_CODE> MqttSession<SocketType>::send_connack(
          asio::buffer(&ack, sizeof(uint8_t)),
          asio::buffer(&reason_code, sizeof(uint8_t))}};
 
-    
-    co_await async_write(socket, buf, asio::redirect_error(asio::use_awaitable, ec));
-    if (ec) {
-        co_return MQTT_RC_CODE::ERR_NO_CONN;
+    if (this->is_websocket) {
+        rc = co_await this->write_websocket(buf);
+        if (rc != MQTT_RC_CODE::ERR_SUCCESS) {
+            co_return rc;
+        }
+    } else {
+        co_await async_write(socket, buf,
+                             asio::redirect_error(asio::use_awaitable, ec));
+        if (ec) {
+            co_return MQTT_RC_CODE::ERR_NO_CONN;
+        }
     }
 
     co_return rc;
@@ -845,10 +866,17 @@ asio::awaitable<MQTT_RC_CODE> MqttSession<SocketType>::send_suback(
          asio::buffer(&net_packet_id, sizeof(uint16_t)),
          asio::buffer(payload.data(), payload.length())}};
 
-    
-    co_await async_write(this->socket, buf, asio::redirect_error(asio::use_awaitable, ec));
-    if (ec) {
-        co_return MQTT_RC_CODE::ERR_NO_CONN;
+    if (this->is_websocket) {
+        rc = co_await this->write_websocket(buf);
+        if (rc != MQTT_RC_CODE::ERR_SUCCESS) {
+            co_return rc;
+        }
+    } else {
+        co_await async_write(this->socket, buf,
+                             asio::redirect_error(asio::use_awaitable, ec));
+        if (ec) {
+            co_return MQTT_RC_CODE::ERR_NO_CONN;
+        }
     }
 
     SPDLOG_DEBUG("SUBACK: send packet_id = [X'{:04X}']", packet_id);
@@ -875,10 +903,17 @@ asio::awaitable<MQTT_RC_CODE> MqttSession<SocketType>::send_unsuback(
         {asio::buffer(packet.data(), packet.length()),
          asio::buffer(&net_packet_id, sizeof(uint16_t))}};
 
-    
-    co_await async_write(this->socket, buf, asio::redirect_error(asio::use_awaitable, ec));
-    if (ec) {
-        co_return MQTT_RC_CODE::ERR_NO_CONN;
+    if (this->is_websocket) {
+        rc = co_await this->write_websocket(buf);
+        if (rc != MQTT_RC_CODE::ERR_SUCCESS) {
+            co_return rc;
+        }
+    } else {
+        co_await async_write(this->socket, buf,
+                             asio::redirect_error(asio::use_awaitable, ec));
+        if (ec) {
+            co_return MQTT_RC_CODE::ERR_NO_CONN;
+        }
     }
 
     SPDLOG_DEBUG("UNSUBACK: send packet_id = [X'{:04X}']", packet_id);
@@ -905,10 +940,17 @@ asio::awaitable<MQTT_RC_CODE> MqttSession<SocketType>::send_puback(
         {asio::buffer(packet.data(), packet.length()),
          asio::buffer(&net_packet_id, sizeof(uint16_t))}};
 
-    
-    co_await async_write(this->socket, buf, asio::redirect_error(asio::use_awaitable, ec));
-    if (ec) {
-        co_return MQTT_RC_CODE::ERR_NO_CONN;
+    if (this->is_websocket) {
+        rc = co_await this->write_websocket(buf);
+        if (rc != MQTT_RC_CODE::ERR_SUCCESS) {
+            co_return rc;
+        }
+    } else {
+        co_await async_write(this->socket, buf,
+                             asio::redirect_error(asio::use_awaitable, ec));
+        if (ec) {
+            co_return MQTT_RC_CODE::ERR_NO_CONN;
+        }
     }
 
     SPDLOG_DEBUG("PUBACK: send packet_id = [X'{:04X}']", packet_id);
@@ -935,10 +977,17 @@ asio::awaitable<MQTT_RC_CODE> MqttSession<SocketType>::send_pubrec(
         {asio::buffer(packet.data(), packet.length()),
          asio::buffer(&net_packet_id, sizeof(uint16_t))}};
 
-    
-    co_await async_write(this->socket, buf, asio::redirect_error(asio::use_awaitable, ec));
-    if (ec) {
-        co_return MQTT_RC_CODE::ERR_NO_CONN;
+    if (this->is_websocket) {
+        rc = co_await this->write_websocket(buf);
+        if (rc != MQTT_RC_CODE::ERR_SUCCESS) {
+            co_return rc;
+        }
+    } else {
+        co_await async_write(this->socket, buf,
+                             asio::redirect_error(asio::use_awaitable, ec));
+        if (ec) {
+            co_return MQTT_RC_CODE::ERR_NO_CONN;
+        }
     }
 
     SPDLOG_DEBUG("PUBREC: send packet_id = [X'{:04X}']", packet_id);
@@ -965,9 +1014,17 @@ asio::awaitable<MQTT_RC_CODE> MqttSession<SocketType>::send_pubrel(
         {asio::buffer(packet.data(), packet.length()),
          asio::buffer(&net_packet_id, sizeof(uint16_t))}};
 
-    co_await async_write(this->socket, buf, asio::redirect_error(asio::use_awaitable, ec));
-    if (ec) {
-        co_return MQTT_RC_CODE::ERR_NO_CONN;
+    if (this->is_websocket) {
+        rc = co_await this->write_websocket(buf);
+        if (rc != MQTT_RC_CODE::ERR_SUCCESS) {
+            co_return rc;
+        }
+    } else {
+        co_await async_write(this->socket, buf,
+                             asio::redirect_error(asio::use_awaitable, ec));
+        if (ec) {
+            co_return MQTT_RC_CODE::ERR_NO_CONN;
+        }
     }
 
     SPDLOG_DEBUG("PUBREL: send packet_id = [X'{:04X}']", packet_id);
@@ -994,9 +1051,17 @@ asio::awaitable<MQTT_RC_CODE> MqttSession<SocketType>::send_pubcomp(
         {asio::buffer(packet.data(), packet.length()),
          asio::buffer(&net_packet_id, sizeof(uint16_t))}};
 
-    co_await async_write(this->socket, buf, asio::redirect_error(asio::use_awaitable, ec));
-    if (ec) {
-        co_return MQTT_RC_CODE::ERR_NO_CONN;
+    if (this->is_websocket) {
+        rc = co_await this->write_websocket(buf);
+        if (rc != MQTT_RC_CODE::ERR_SUCCESS) {
+            co_return rc;
+        }
+    } else {
+        co_await async_write(this->socket, buf,
+                             asio::redirect_error(asio::use_awaitable, ec));
+        if (ec) {
+            co_return MQTT_RC_CODE::ERR_NO_CONN;
+        }
     }
 
     SPDLOG_DEBUG("PUBCOMP: send packet_id = [X'{:04X}']", packet_id);
@@ -1015,11 +1080,18 @@ asio::awaitable<MQTT_RC_CODE> MqttSession<SocketType>::send_pingresp() {
         co_return rc;
     }
 
-    co_await async_write(this->socket,
+    if (this->is_websocket) {
+        rc = co_await this->write_websocket(packet);
+        if (rc != MQTT_RC_CODE::ERR_SUCCESS) {
+            co_return rc;
+        }
+    } else {
+        co_await async_write(this->socket,
                              asio::buffer(packet.data(), packet.length()),
                              asio::redirect_error(asio::use_awaitable, ec));
-    if (ec) {
-        co_return MQTT_RC_CODE::ERR_NO_CONN;
+        if (ec) {
+            co_return MQTT_RC_CODE::ERR_NO_CONN;
+        }
     }
 
     SPDLOG_DEBUG("PINGRESP");
@@ -1029,19 +1101,40 @@ asio::awaitable<MQTT_RC_CODE> MqttSession<SocketType>::send_pingresp() {
 
 template <typename SocketType>
 asio::awaitable<void> MqttSession<SocketType>::handle_packet() {
+    // 如果是 websocket, 需要进行一次握手
+    if (this->is_websocket) {
+        this->rc = co_await handle_websocket_handshake();
+        if (this->rc != MQTT_RC_CODE::ERR_SUCCESS) {
+            handle_error_code();
+            co_return;
+        }
+    }
+
     for (;;) {
         init_buffer();
 
         flush_deadline();
 
-        this->rc = co_await read_fixed_header();
-        if (this->rc != MQTT_RC_CODE::ERR_SUCCESS) {
-            break;
-        }
+        if (this->is_websocket) {
+            this->rc = co_await read_websocket();
+            if (this->rc != MQTT_RC_CODE::ERR_SUCCESS) {
+                break;
+            }
 
-        this->rc = co_await read_bytes_to_buf(this->payload, this->remaining_length, false);
-        if (this->rc != MQTT_RC_CODE::ERR_SUCCESS) {
-            break;
+            SPDLOG_INFO("command = [X'{:02X}'], remaining_length = [{}]",
+                        static_cast<uint16_t>(this->command),
+                        this->remaining_length);
+        } else {
+            this->rc = co_await read_fixed_header();
+            if (this->rc != MQTT_RC_CODE::ERR_SUCCESS) {
+                break;
+            }
+
+            this->rc = co_await read_bytes_to_buf(
+                this->payload, this->remaining_length, false);
+            if (this->rc != MQTT_RC_CODE::ERR_SUCCESS) {
+                break;
+            }
         }
 
         switch (this->command & 0xF0) {
@@ -1089,6 +1182,309 @@ asio::awaitable<void> MqttSession<SocketType>::handle_packet() {
     }
 
     handle_error_code();
+}
+
+template <typename SocketType>
+asio::awaitable<MQTT_RC_CODE>
+MqttSession<SocketType>::handle_websocket_handshake() {
+    asio::error_code ec;
+    MQTT_RC_CODE rc = MQTT_RC_CODE::ERR_SUCCESS;
+
+    const char* method;
+    size_t method_len;
+    const char* url;
+    size_t url_len;
+    int minor_version;
+    size_t num_headers = 100;
+    std::vector<phr_header> headers(num_headers);
+    int pret;
+    uint8_t sha1buf[20], key_src[60];
+    char accept_key[29];
+
+    size_t data_len = co_await asio::async_read_until(
+        this->socket, this->head_buf, "\r\n\r\n",
+        asio::redirect_error(asio::use_awaitable, ec));
+    if (ec) {
+        co_return MQTT_RC_CODE::ERR_NO_CONN;
+    }
+
+    const char* data = asio::buffer_cast<const char*>(this->head_buf.data());
+    pret =
+        phr_parse_request(data, data_len, &method, &method_len, &url, &url_len,
+                          &minor_version, headers.data(), &num_headers, 0);
+    if (pret < 0) {
+        SPDLOG_WARN("parse http head failed");
+        co_return MQTT_RC_CODE::ERR_PROTOCOL;
+    }
+
+    this->head_buf.consume(data_len);
+
+    auto get_header_value =
+        [&headers, num_headers](std::string_view key) -> std::string_view {
+        for (size_t i = 0; i < num_headers; i++) {
+            if (tolower_equal(key, std::string_view(headers[i].name,
+                                                    headers[i].name_len))) {
+                return trim_sv(
+                    std::string_view(headers[i].value, headers[i].value_len));
+            }
+        }
+        return "";
+    };
+
+    if (!tolower_equal(std::string_view(method, method_len), "GET"sv)) {
+        SPDLOG_WARN("not GET request");
+        co_return MQTT_RC_CODE::ERR_PROTOCOL;
+    }
+
+    if (!tolower_equal(get_header_value("Connection"sv), "Upgrade"sv)) {
+        SPDLOG_WARN("not upgrade request");
+        co_return MQTT_RC_CODE::ERR_PROTOCOL;
+    }
+
+    if (!tolower_equal(get_header_value("Upgrade"sv), "websocket"sv)) {
+        SPDLOG_WARN("not websocket request");
+        co_return MQTT_RC_CODE::ERR_PROTOCOL;
+    }
+
+    if (!tolower_equal(get_header_value("Sec-WebSocket-Version"sv), "13"sv)) {
+        SPDLOG_WARN("error websocket version");
+        co_return MQTT_RC_CODE::ERR_PROTOCOL;
+    }
+
+    if (!tolower_equal(get_header_value("Sec-WebSocket-Protocol"sv),
+                       "mqtt"sv)) {
+        SPDLOG_WARN("not mqtt request");
+        co_return MQTT_RC_CODE::ERR_PROTOCOL;
+    }
+
+    if (atoi(get_header_value("Content-Length"sv).data())) {
+        SPDLOG_WARN("content-length must be 0");
+        co_return MQTT_RC_CODE::ERR_PROTOCOL;
+    }
+
+    auto ws_key_sv = get_header_value("Sec-WebSocket-Key"sv);
+    if (ws_key_sv.length() != 24) {
+        SPDLOG_WARN("error Sec-WebSocket-Key value");
+        co_return MQTT_RC_CODE::ERR_PROTOCOL;
+    }
+
+    std::memcpy(key_src, ws_key_sv.data(), 24);
+    std::memcpy(key_src + 24, "258EAFA5-E914-47DA-95CA-C5AB0DC85B11", 36);
+
+    sha1_context ctx;
+    init(ctx);
+    update(ctx, key_src, sizeof(key_src));
+    finish(ctx, sha1buf);
+
+    utils::base64_encode(accept_key, sha1buf, sizeof(sha1buf), 0);
+
+    // clang-format off
+    auto resp_content =
+    "HTTP/1.1 101 Switching Protocols\r\n"
+    "Connection: Upgrade\r\n"
+    "Sec-WebSocket-Accept: " + std::string(accept_key, 28) + "\r\n"
+    "Sec-WebSocket-Protocol: mqtt\r\n"
+    "Upgrade: websocket\r\n"
+    "\r\n";
+    // clang-format on
+
+    co_await async_write(
+        this->socket, asio::buffer(resp_content.data(), resp_content.length()),
+        asio::redirect_error(asio::use_awaitable, ec));
+    if (ec) {
+        co_return MQTT_RC_CODE::ERR_NO_CONN;
+    }
+
+    co_return rc;
+}
+
+template <typename SocketType>
+asio::awaitable<MQTT_RC_CODE> MqttSession<SocketType>::read_websocket() {
+    asio::error_code ec;
+    MQTT_RC_CODE rc = MQTT_RC_CODE::ERR_SUCCESS;
+    bool is_new_frame = true;
+    bool is_read_cmd = false;
+    bool is_read_remaining_length = false;
+    uint32_t remaining_count = 0;
+    uint32_t remaining_mult = 1;
+
+    while (true) {
+        if (is_new_frame) {
+            co_await async_read(this->socket, this->head_buf,
+                                asio::transfer_exactly(SHORT_HEADER),
+                                asio::redirect_error(asio::use_awaitable, ec));
+            if (ec) {
+                co_return MQTT_RC_CODE::ERR_NO_CONN;
+            }
+            is_new_frame = false;
+        }
+
+        const char* data_ptr =
+            asio::buffer_cast<const char*>(this->head_buf.data());
+        auto status = this->ws.parse_header(data_ptr, this->ws.len_bytes());
+        if (status == ws_header_status::complete) {
+            this->ws.reset_len_bytes();
+            this->head_buf.consume(this->head_buf.size());
+
+            auto ws_payload_length = this->ws.payload_length();
+
+            if (ws_payload_length == 0) {
+                is_new_frame = true;
+                continue;
+            }
+
+            auto old_payload_length = this->payload.length();
+            auto new_payload_length = old_payload_length + ws_payload_length;
+
+            this->payload.resize(new_payload_length);
+
+            co_await async_read(
+                this->socket,
+                asio::buffer(this->payload.data() + old_payload_length,
+                             ws_payload_length),
+                asio::redirect_error(asio::use_awaitable, ec));
+            if (ec) {
+                co_return MQTT_RC_CODE::ERR_NO_CONN;
+            }
+
+            std::span<char> ws_payload(
+                this->payload.data() + old_payload_length, ws_payload_length);
+
+            ws_frame_type type = ws.parse_payload(ws_payload);
+            switch (type) {
+                case ws_frame_type::WS_INCOMPLETE_BINARY_FRAME:
+                case ws_frame_type::WS_BINARY_FRAME: {
+                    break;
+                }
+                case ws_frame_type::WS_CLOSE_FRAME: {
+                    close_frame cf = ws.parse_close_payload(ws_payload.data(),
+                                                            ws_payload.size());
+                    std::string close_msg = ws.format_close_payload(
+                        close_code::normal, cf.message, cf.length);
+                    co_await this->write_websocket(close_msg, opcode::close);
+                    this->disconnect();
+                    co_return MQTT_RC_CODE::ERR_SUCCESS_DISCONNECT;
+                }
+                default: {
+                    SPDLOG_WARN("Unsupported WebSocket frames: {}",
+                                static_cast<uint32_t>(type));
+                    co_return MQTT_RC_CODE::ERR_PROTOCOL;
+                }
+            }
+
+            if (!is_read_cmd && this->pos < this->payload.length()) {
+                this->command = this->payload[this->pos];
+                this->pos++;
+
+                rc = this->check_command();
+                if (rc != MQTT_RC_CODE::ERR_SUCCESS) {
+                    co_return rc;
+                }
+
+                is_read_cmd = true;
+                new_payload_length--;
+            }
+
+            if (!is_read_remaining_length) {
+                for (;
+                     this->pos < this->payload.length() && remaining_count < 4;
+                     remaining_count++, remaining_mult <<= 7) {
+                    auto byte = this->payload[this->pos];
+                    this->pos++;
+
+                    remaining_length += (byte & 0x7F) * remaining_mult;
+
+                    if (!(byte & 0x80)) {
+                        is_read_remaining_length = true;
+                        this->remaining_length = remaining_length;
+                        std::memmove(this->payload.data(),
+                                     this->payload.data() + this->pos,
+                                     this->payload.length() - this->pos);
+                        this->payload.resize(this->payload.length() -
+                                             this->pos);
+                        this->pos = 0;
+                        break;
+                    }
+                }
+            }
+
+            if (is_read_remaining_length) {
+                if (this->payload.length() > this->remaining_length) {
+                    co_return MQTT_RC_CODE::ERR_REMAINING_LENGTH;
+                }
+
+                if (this->payload.length() == this->remaining_length) {
+                    break;
+                }
+            }
+
+            is_new_frame = true;
+        } else if (status == ws_header_status::incomplete) {
+            co_await async_read(
+                this->socket, this->head_buf,
+                asio::transfer_exactly(this->ws.left_header_len()),
+                asio::redirect_error(asio::use_awaitable, ec));
+            if (ec) {
+                co_return MQTT_RC_CODE::ERR_NO_CONN;
+            }
+        } else {
+            SPDLOG_WARN("ws_header_status error");
+            co_return MQTT_RC_CODE::ERR_PROTOCOL;
+        }
+    }
+
+    co_return rc;
+}
+
+template <typename SocketType>
+asio::awaitable<MQTT_RC_CODE> MqttSession<SocketType>::write_websocket(
+    std::string_view msg, opcode op, bool eof) {
+    asio::error_code ec;
+    MQTT_RC_CODE rc = MQTT_RC_CODE::ERR_SUCCESS;
+
+    std::vector<asio::const_buffer> buffers;
+    std::string_view header;
+
+    header = ws.encode_ws_header(msg.length(), op, eof, false, false);
+    buffers.push_back(asio::buffer(header));
+    buffers.push_back(asio::buffer(msg));
+
+    co_await async_write(this->socket, buffers,
+                         asio::redirect_error(asio::use_awaitable, ec));
+    if (ec) {
+        co_return MQTT_RC_CODE::ERR_NO_CONN;
+    }
+
+    co_return rc;
+}
+
+template <typename SocketType>
+template <std::size_t N>
+asio::awaitable<MQTT_RC_CODE> MqttSession<SocketType>::write_websocket(
+    std::array<asio::const_buffer, N> msg, opcode op, bool eof) {
+    asio::error_code ec;
+    MQTT_RC_CODE rc = MQTT_RC_CODE::ERR_SUCCESS;
+
+    std::vector<asio::const_buffer> buffers;
+    std::string_view header;
+
+    std::size_t total_size = 0;
+    for (const auto& buf : msg) {
+        total_size += asio::buffer_size(buf);
+    }
+    header = ws.encode_ws_header(total_size, op, eof, false, false);
+    buffers.push_back(asio::buffer(header));
+
+    buffers.insert(buffers.end(), msg.begin(), msg.end());
+
+    co_await async_write(this->socket, buffers,
+                         asio::redirect_error(asio::use_awaitable, ec));
+
+    if (ec) {
+        co_return MQTT_RC_CODE::ERR_NO_CONN;
+    }
+
+    co_return rc;
 }
 
 template <typename SocketType>
@@ -1959,7 +2355,8 @@ asio::awaitable<MQTT_RC_CODE> MqttSession<SocketType>::send_mqtt_packets(
 }
 
 template <typename SocketType>
-asio::awaitable<void> MqttSession<SocketType>::send_publish_qos0(mqtt_packet_t packet) {
+asio::awaitable<void> MqttSession<SocketType>::send_publish_qos0(
+    mqtt_packet_t packet) {
     asio::error_code ec;
     MQTT_RC_CODE rc;
     std::string header;
@@ -1992,16 +2389,29 @@ asio::awaitable<void> MqttSession<SocketType>::send_publish_qos0(mqtt_packet_t p
          asio::buffer(topic_name.data(), topic_name.length()),
          asio::buffer(payload.data(), payload.length())}};
 
-    
-    co_await async_write(this->socket, buf, asio::redirect_error(asio::use_awaitable, ec));
-    if (ec) {
-        SPDLOG_WARN("Failed to publish topic = [{}]", std::string(topic_name));
-        co_return;
+    if (this->is_websocket) {
+        rc = co_await this->write_websocket(buf);
+        if (rc != MQTT_RC_CODE::ERR_SUCCESS) {
+            SPDLOG_WARN("Failed to publish topic = [{}]",
+                        std::string(topic_name));
+            co_return;
+        }
+    } else {
+        co_await async_write(this->socket, buf,
+                             asio::redirect_error(asio::use_awaitable, ec));
+        if (ec) {
+            SPDLOG_WARN("Failed to publish topic = [{}]",
+                        std::string(topic_name));
+            co_return;
+        }
     }
+
+    co_return;
 }
 
 template <typename SocketType>
-asio::awaitable<MQTT_RC_CODE> MqttSession<SocketType>::send_publish_qos1(mqtt_packet_t packet, bool is_new) {
+asio::awaitable<MQTT_RC_CODE> MqttSession<SocketType>::send_publish_qos1(
+    mqtt_packet_t packet, bool is_new) {
     asio::error_code ec;
     MQTT_RC_CODE rc;
     std::string header;
@@ -2056,18 +2466,27 @@ asio::awaitable<MQTT_RC_CODE> MqttSession<SocketType>::send_publish_qos1(mqtt_pa
          asio::buffer(&packet_id, sizeof(uint16_t)),
          asio::buffer(payload.data(), payload.length())}};
 
-    
-    co_await async_write(this->socket, buf, asio::redirect_error(asio::use_awaitable, ec));
-    if (ec) {
-        SPDLOG_WARN("Failed to publish topic = [{}]", std::string(topic_name));
-        co_return MQTT_RC_CODE::ERR_NO_CONN;
+    if (this->is_websocket) {
+        rc = co_await this->write_websocket(buf);
+        if (rc != MQTT_RC_CODE::ERR_SUCCESS) {
+            co_return rc;
+        }
+    } else {
+        co_await async_write(this->socket, buf,
+                             asio::redirect_error(asio::use_awaitable, ec));
+        if (ec) {
+            SPDLOG_WARN("Failed to publish topic = [{}]",
+                        std::string(topic_name));
+            co_return MQTT_RC_CODE::ERR_NO_CONN;
+        }
     }
 
     co_return rc;
 }
 
 template <typename SocketType>
-asio::awaitable<MQTT_RC_CODE> MqttSession<SocketType>::send_publish_qos2(mqtt_packet_t packet, bool is_new) {
+asio::awaitable<MQTT_RC_CODE> MqttSession<SocketType>::send_publish_qos2(
+    mqtt_packet_t packet, bool is_new) {
     asio::error_code ec;
     MQTT_RC_CODE rc;
     std::string header;
@@ -2122,11 +2541,19 @@ asio::awaitable<MQTT_RC_CODE> MqttSession<SocketType>::send_publish_qos2(mqtt_pa
          asio::buffer(&packet_id, sizeof(uint16_t)),
          asio::buffer(payload.data(), payload.length())}};
 
-    
-    co_await async_write(this->socket, buf, asio::redirect_error(asio::use_awaitable, ec));
-    if (ec) {
-        SPDLOG_WARN("Failed to publish topic = [{}]", std::string(topic_name));
-        co_return MQTT_RC_CODE::ERR_NO_CONN;
+    if (this->is_websocket) {
+        rc = co_await this->write_websocket(buf);
+        if (rc != MQTT_RC_CODE::ERR_SUCCESS) {
+            co_return rc;
+        }
+    } else {
+        co_await async_write(this->socket, buf,
+                             asio::redirect_error(asio::use_awaitable, ec));
+        if (ec) {
+            SPDLOG_WARN("Failed to publish topic = [{}]",
+                        std::string(topic_name));
+            co_return MQTT_RC_CODE::ERR_NO_CONN;
+        }
     }
 
     co_return rc;

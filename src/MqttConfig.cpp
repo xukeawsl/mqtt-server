@@ -239,12 +239,17 @@ void MqttConfig::parse_listeners(const YAML::Node& node) {
             cfg.proto = MQTT_PROTOCOL::MQTT;
         } else if (protocol == "mqtts") {
             cfg.proto = MQTT_PROTOCOL::MQTTS;
+        } else if (protocol == "ws") {
+            cfg.proto = MQTT_PROTOCOL::WS;
+        } else if (protocol == "wss") {
+            cfg.proto = MQTT_PROTOCOL::WSS;
         } else {
             throw std::runtime_error(
                 "not supported protocol: listeners-address");
         }
 
-        if (cfg.proto == MQTT_PROTOCOL::MQTTS) {
+        if (cfg.proto == MQTT_PROTOCOL::MQTTS ||
+            cfg.proto == MQTT_PROTOCOL::WSS) {
             mqtt_ssl_cfg_t ssl_cfg;
 
             if (node["version"].IsDefined() &&

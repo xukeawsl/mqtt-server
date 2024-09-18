@@ -2,7 +2,6 @@
 
 #include "MqttCommon.h"
 #include "MqttBroker.h"
-#include "MqttSession.h"
 
 class MqttServer {
 public:
