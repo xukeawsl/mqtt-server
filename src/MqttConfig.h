@@ -61,7 +61,7 @@ private:
     MqttConfig(MqttConfig&&) = delete;
     MqttConfig& operator=(MqttConfig&&) = delete;
 
-    void parse_listeners(YAML::Node& node);
+    void parse_listeners(const YAML::Node& node);
 
 private:
     mqtt_ssl_cfg_t default_ssl_cfg_;

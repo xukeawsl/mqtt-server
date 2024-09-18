@@ -80,8 +80,7 @@ bool MqttConfig::parse(const std::string& file_name) {
         }
 
         if (root["listeners"].IsDefined()) {
-            auto nodeListeners = root["listeners"];
-            parse_listeners(nodeListeners);
+            parse_listeners(root["listeners"]);
         }
 
         if (root["server"].IsDefined()) {
@@ -220,7 +219,7 @@ bool MqttConfig::acl_check(const mqtt_acl_rule_t& rule) {
     return state == MQTT_ACL_STATE::ALLOW;
 }
 
-void MqttConfig::parse_listeners(YAML::Node& node) {
+void MqttConfig::parse_listeners(const YAML::Node& node) {
     for (const auto& nodeListener : node) {
         mqtt_listener_cfg_t cfg;
 
