@@ -3,3 +3,4 @@
 exclude_paths:
   - "test/**"
   - "third-party/**"
+  - "src/MqttWebSocket.h"
