@@ -25,6 +25,8 @@ mqtt-server 是一个使用 C++20 协程开发的支持 MQTT `v3.1.1` 协议的�
 
 * 支持 Docker 部署 (详见 [Use Docker Image](https://github.com/xukeawsl/mqtt-server/wiki/3.Use-Docker-Image) )
 
+* 支持 WebSocket 协议
+
 ## 使用
 
 ### 1. 克隆源代码
