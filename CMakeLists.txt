@@ -67,6 +67,8 @@ file(GLOB_RECURSE ipps ${PROJECT_SOURCE_DIR}/src/*.ipp)
 
 include_directories(
     third-party/asio/include
+    third-party/sha1
+    third-party/picohttpparser
     src/
 )
 
