@@ -45,7 +45,7 @@ listeners:
 
   # 加密 websocket 连接, 配置一个指定的 TLS 版本
   - address: 'wss://0.0.0.0'
-    port: 18833
+    port: 8084
     version: 'tls1.3'
 
 # MQTT Server 相关配置
