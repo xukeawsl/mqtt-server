@@ -54,7 +54,7 @@ private:
     asio::awaitable<MQTT_RC_CODE> write_websocket(std::string_view msg, opcode op = opcode::binary, bool eof = true);
 
     template <std::size_t N>
-    asio::awaitable<MQTT_RC_CODE> write_websocket(std::array<asio::const_buffer, N> msg, opcode op = opcode::binary, bool eof = true);
+    asio::awaitable<MQTT_RC_CODE> write_websocket(const std::array<asio::const_buffer, N>& msg, opcode op = opcode::binary, bool eof = true);
 
     asio::awaitable<MQTT_RC_CODE> handle_connect();
 

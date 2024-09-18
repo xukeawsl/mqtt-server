@@ -1461,7 +1461,7 @@ asio::awaitable<MQTT_RC_CODE> MqttSession<SocketType>::write_websocket(
 template <typename SocketType>
 template <std::size_t N>
 asio::awaitable<MQTT_RC_CODE> MqttSession<SocketType>::write_websocket(
-    std::array<asio::const_buffer, N> msg, opcode op, bool eof) {
+    const std::array<asio::const_buffer, N>& msg, opcode op, bool eof) {
     asio::error_code ec;
     MQTT_RC_CODE rc = MQTT_RC_CODE::ERR_SUCCESS;
 
