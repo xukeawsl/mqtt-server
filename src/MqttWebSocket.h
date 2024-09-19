@@ -1,17 +1,8 @@
 #pragma once
 
 #include <span>
-#include <algorithm>
-#include <array>
-#include <asio.hpp>
-#include <cctype>
-#include <charconv>
-#include <cstddef>  //std::byte
-#include <cstdlib>
-#include <iomanip>
 #include <string>
 #include <string_view>
-#include <type_traits>
 #include <vector>
 
 #include "MqttUtils.h"
@@ -24,12 +15,9 @@ enum ws_header_status {
   complete = 0,
   incomplete = -2,
 };
+
 class MqttWebSocket {
  public:
-  void sec_ws_key(std::string_view sec_key) { sec_ws_key_ = sec_key; }
-
-  std::string_view get_sec_ws_key() { return sec_ws_key_; }
-
   /*
   0               1               2               3
    0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1
@@ -107,6 +95,7 @@ class MqttWebSocket {
   }
 
   int len_bytes() const { return len_bytes_; }
+
   void reset_len_bytes() { len_bytes_ = SHORT_HEADER; }
 
   ws_frame_type parse_payload(std::span<char> buf) {
@@ -185,21 +174,6 @@ class MqttWebSocket {
     return {msg_header_, header_len + len_bytes};
   }
 
-  void encode_ws_payload(std::span<char> &data) {
-    for (size_t i = 0; i < data.size(); ++i) {
-      data[i] ^= mask_key_[i % 4];
-    }
-  }
-
-  std::string_view encode_frame(std::span<char> &data, opcode op, bool eof,
-                                bool need_compression = false) {
-    std::string_view ws_header =
-        encode_ws_header(data.size(), op, eof, need_compression);
-    encode_ws_payload(data);
-
-    return ws_header;
-  }
-
   close_frame parse_close_payload(char *src, size_t length) {
     close_frame cf = {};
     if (length >= 2) {
@@ -232,41 +206,7 @@ class MqttWebSocket {
 
   size_t payload_length() const { return payload_length_; }
 
-  opcode get_opcode() { return (opcode)msg_opcode_; }
-
- private:
-  size_t encode_header(size_t length, opcode code, bool is_compressed = false) {
-    size_t header_length;
-
-    if (length < 126) {
-      header_length = 2;
-      msg_header_[1] = static_cast<char>(length);
-    }
-    else if (length <= UINT16_MAX) {
-      header_length = 4;
-      msg_header_[1] = 126;
-      *((uint16_t *)&msg_header_[2]) = htons(static_cast<uint16_t>(length));
-    }
-    else {
-      header_length = 10;
-      msg_header_[1] = 127;
-      *((uint64_t *)&msg_header_[2]) = htobe64(length);
-    }
-
-    int flags = 0;
-    msg_header_[0] = (flags & SND_NO_FIN ? 0 : char(128));
-    if (!(flags & SND_CONTINUATION)) {
-      msg_header_[0] |= code;
-    }
-
-    if (is_compressed)
-      msg_header_[0] |= 0x40;
-
-    return header_length;
-  }
-
-  std::string_view sec_ws_key_;
-
+private:
   size_t payload_length_ = 0;
 
   size_t left_header_len_ = 2;

@@ -14,6 +14,7 @@ inline const char *MAP_URL_ENCODED =
     "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
     "abcdefghijklmnopqrstuvwxyz"
     "0123456789-_";
+
 inline size_t base64_encode(char *_dst, const void *_src, size_t len,
                             int url_encoded) {
   char *dst = _dst;
@@ -51,7 +52,7 @@ inline size_t base64_encode(char *_dst, const void *_src, size_t len,
   return dst - _dst;
 }
 
-bool is_valid_utf8(unsigned char *s, size_t length) {
+inline bool is_valid_utf8(unsigned char *s, size_t length) {
   for (unsigned char *e = s + length; s != e;) {
     if (s + 4 <= e && ((*(uint32_t *)s) & 0x80808080) == 0) {
       s += 4;

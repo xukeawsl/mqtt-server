@@ -1269,7 +1269,7 @@ MqttSession<SocketType>::handle_websocket_handshake() {
     }
 
     std::memcpy(key_src, ws_key_sv.data(), 24);
-    std::memcpy(key_src + 24, "258EAFA5-E914-47DA-95CA-C5AB0DC85B11", 36);
+    std::memcpy(key_src + 24, ws_guid, 36);
 
     sha1_context ctx;
     init(ctx);
