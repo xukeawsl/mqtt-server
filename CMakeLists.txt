@@ -13,7 +13,12 @@ if(NOT CMAKE_BUILD_TYPE)
 endif()
 
 set(CMAKE_CXX_FLAGS_DEBUG "-O0 -g -ggdb -Wall")
-set(CMAKE_CXX_FLAGS_RELEASE "-O3 -Wno-unused -DNDEBUG")
+
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux")
+    set(CMAKE_CXX_FLAGS_RELEASE "-O3 -Wno-unused -DNDEBUG")
+else()
+    set(CMAKE_CXX_FLAGS_RELEASE "-O3 -DNDEBUG")
+endif()
 
 add_subdirectory(third-party/spdlog)
 
