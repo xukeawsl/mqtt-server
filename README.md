@@ -9,7 +9,7 @@ mqtt-server 是一个使用 C++20 协程开发的支持 MQTT `v3.1.1` 协议的�
 
 ## 前提
 
-* 需要支持 C++20 的编译器版本(Linux GCC 11.2+, Windows MinGW 11.2+)
+* 需要支持 C++20 的编译器版本(Linux GCC 11.2+, Windows MinGW 11.2+, MSVC 19+)
 
 ## 特性
 
