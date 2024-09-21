@@ -15,7 +15,7 @@ build_script:
         mkdir build
         cd build
         cmake ..
-        cmake --build . --config Release
+        cmake --build . --config Release --parallel
       }
 
   # Ubuntu 环境下的 CMake 构建
@@ -24,5 +24,5 @@ build_script:
         mkdir build
         cd build
         cmake ..
-        cmake --build . --config Release
+        cmake --build . --config Release --parallel
       fi
