@@ -121,14 +121,14 @@ endif()
 # Clang-Format
 #
 find_program(CLANG_FORMAT_EXECUTABLE
-    NAME "clang-format"
+    NAME "clang-format-12"
     PATHS "/usr/bin" "/usr/local/bin"
 )
 
 if (CLANG_FORMAT_EXECUTABLE)
-    message(STATUS "Successfully find program `clang-format`")
+    message(STATUS "Successfully find program `clang-format-12`")
     message(STATUS "You can use the `make clang-format` command to automatically format the code style")
-    add_custom_target(clang-format
+    add_custom_target(clang-format ALL
     COMMAND
         ${CLANG_FORMAT_EXECUTABLE} --style=file -i ${hdrs};${srcs};${ipps};${PROJECT_SOURCE_DIR}/main.cpp
     COMMENT
