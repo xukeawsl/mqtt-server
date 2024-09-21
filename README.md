@@ -38,8 +38,6 @@ mkdir build && cd build
 
 ### 2. Cmake 构建
 
-* Linux 平台
-
 ```bash
 # 默认 Release 级别, 也可以选择 Debug 级别构建
 # cmake -DCMAKE_BUILD_TYPE=Debug ..
@@ -50,13 +48,6 @@ cmake --build .
 # Debug 构建默认日志级别是 Debug, 支持以下的日志级别
 # Trace, Debug, Info, Warn, Error, Critical, Off
 cmake -DLOG_LEVEL=Error ..
-```
-
-* Windows 平台
-
-```bash
-cmake -G "MinGW Makefiles" ..
-cmake --build .
 ```
 
 ### 3. 运行 mqtt-server
