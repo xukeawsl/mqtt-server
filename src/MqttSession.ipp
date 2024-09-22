@@ -2173,7 +2173,8 @@ asio::awaitable<void> MqttSession<SocketType>::handle_inflighting_packets() {
                     sub_topic != packet.specified_topic_name) {
                     continue;
                 }
-                if (util::check_topic_match(*(packet.topic_name), sub_topic)) {
+
+                if (utils::check_topic_match(*(packet.topic_name), sub_topic)) {
                     // Qos 等级取两者最小值
                     old_qos = packet.qos;
 

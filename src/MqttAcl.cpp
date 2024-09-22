@@ -149,7 +149,7 @@ MQTT_ACL_STATE MqttAcl::check_acl_detail(const mqtt_acl_rule_t& acl_rule,
 
         // 对于发布控制来说需要进行通配符匹配
         for (const auto& t : *(acl_rule.topics)) {
-            if (util::check_topic_match(topic, t)) {
+            if (utils::check_topic_match(topic, t)) {
                 return acl_rule.permission;
             }
         }

@@ -43,7 +43,6 @@ enum class MQTT_MSG_STATE: uint8_t {
     WAIT_RECEIVE_PUBCOMP,
 };
 
-
 enum class MQTT_RC_CODE: uint8_t {
     ERR_SUCCESS = 0,
     ERR_SUCCESS_DISCONNECT,
@@ -66,7 +65,6 @@ enum class MQTT_RC_CODE: uint8_t {
     ERR_REFUSED_NOT_AUTHORIZED,
 };
 
-
 struct MQTT_CMD {
     static constexpr uint8_t CONNECT = 0x10U;
     static constexpr uint8_t CONNACK = 0x20U;
@@ -84,7 +82,6 @@ struct MQTT_CMD {
     static constexpr uint8_t DISCONNECT = 0xE0U;
 };
 
-
 struct MQTT_CONNACK {
     static constexpr uint8_t ACCEPTED = 0x00U;
     static constexpr uint8_t REFUSED_PROTOCOL_VERSION = 0x01U;
@@ -93,7 +90,6 @@ struct MQTT_CONNACK {
     static constexpr uint8_t REFUSED_BAD_USERNAME_PASSWORD = 0x04U;
     static constexpr uint8_t REFUSED_NOT_AUTHORIZED = 0x05U;
 };
-
 
 struct mqtt_packet_t {
     struct {
@@ -187,26 +183,3 @@ struct mqtt_listener_cfg_t {
     uint16_t port;
     mqtt_ssl_cfg_t ssl_cfg;
 };
-
-namespace convert {
-
-template <typename InternetProtocol>
-std::string format_address(
-    const asio::ip::basic_endpoint<InternetProtocol>& endpoint) {
-    if (endpoint.address().is_v6()) {
-        return "[" + endpoint.address().to_string() + "]" + ":" +
-               std::to_string(endpoint.port());
-    }
-    return endpoint.address().to_string() + ":" +
-           std::to_string(endpoint.port());
-}
-
-}
-
-
-namespace util {
-
-bool check_topic_match(const std::string& pub_topic,
-                                    const std::string& sub_topic);
-
-}

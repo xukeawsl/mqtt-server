@@ -1,6 +1,7 @@
 #pragma once
 
 #include "MqttCommon.h"
+#include "MqttUtils.h"
 
 class MqttAcl {
 public:
