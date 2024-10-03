@@ -175,4 +175,16 @@ inline bool check_topic_match(const std::string& pub_topic,
     return false;
 }
 
+inline bool tolower_equal(std::string_view a, std::string_view b) {
+    return std::equal(a.begin(), a.end(), b.begin(), b.end(),
+                      [](char a, char b) { return tolower(a) == tolower(b); });
+}
+
+inline std::string_view trim_sv(std::string_view v) {
+    v.remove_prefix((std::min)(v.find_first_not_of(" "), v.size()));
+    v.remove_suffix(
+        (std::min)(v.size() - v.find_last_not_of(" ") - 1, v.size()));
+    return v;
+}
+
 }

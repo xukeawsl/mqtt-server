@@ -2,18 +2,6 @@
 
 using namespace std::string_view_literals;
 
-static bool tolower_equal(std::string_view a, std::string_view b) {
-    return std::equal(a.begin(), a.end(), b.begin(), b.end(),
-                      [](char a, char b) { return tolower(a) == tolower(b); });
-}
-
-static std::string_view trim_sv(std::string_view v) {
-    v.remove_prefix((std::min)(v.find_first_not_of(" "), v.size()));
-    v.remove_suffix(
-        (std::min)(v.size() - v.find_last_not_of(" ") - 1, v.size()));
-    return v;
-}
-
 template <typename SocketType>
 std::unordered_set<std::string> MqttSession<SocketType>::active_sub_set;
 
@@ -1222,37 +1210,39 @@ MqttSession<SocketType>::handle_websocket_handshake() {
     auto get_header_value =
         [&headers, num_headers](std::string_view key) -> std::string_view {
         for (size_t i = 0; i < num_headers; i++) {
-            if (tolower_equal(key, std::string_view(headers[i].name,
-                                                    headers[i].name_len))) {
-                return trim_sv(
+            if (utils::tolower_equal(
+                    key,
+                    std::string_view(headers[i].name, headers[i].name_len))) {
+                return utils::trim_sv(
                     std::string_view(headers[i].value, headers[i].value_len));
             }
         }
         return "";
     };
 
-    if (!tolower_equal(std::string_view(method, method_len), "GET"sv)) {
+    if (!utils::tolower_equal(std::string_view(method, method_len), "GET"sv)) {
         SPDLOG_WARN("not GET request");
         co_return MQTT_RC_CODE::ERR_PROTOCOL;
     }
 
-    if (!tolower_equal(get_header_value("Connection"sv), "Upgrade"sv)) {
+    if (!utils::tolower_equal(get_header_value("Connection"sv), "Upgrade"sv)) {
         SPDLOG_WARN("not upgrade request");
         co_return MQTT_RC_CODE::ERR_PROTOCOL;
     }
 
-    if (!tolower_equal(get_header_value("Upgrade"sv), "websocket"sv)) {
+    if (!utils::tolower_equal(get_header_value("Upgrade"sv), "websocket"sv)) {
         SPDLOG_WARN("not websocket request");
         co_return MQTT_RC_CODE::ERR_PROTOCOL;
     }
 
-    if (!tolower_equal(get_header_value("Sec-WebSocket-Version"sv), "13"sv)) {
+    if (!utils::tolower_equal(get_header_value("Sec-WebSocket-Version"sv),
+                              "13"sv)) {
         SPDLOG_WARN("error websocket version");
         co_return MQTT_RC_CODE::ERR_PROTOCOL;
     }
 
-    if (!tolower_equal(get_header_value("Sec-WebSocket-Protocol"sv),
-                       "mqtt"sv)) {
+    if (!utils::tolower_equal(get_header_value("Sec-WebSocket-Protocol"sv),
+                              "mqtt"sv)) {
         SPDLOG_WARN("not mqtt request");
         co_return MQTT_RC_CODE::ERR_PROTOCOL;
     }
@@ -1779,6 +1769,10 @@ asio::awaitable<MQTT_RC_CODE> MqttSession<SocketType>::handle_publish() {
     // 允许主题内容为空, 对于保留消息来说, 内容为空就删除保留消息
     pub_payloadlen = this->remaining_length - this->pos;
     if (pub_payloadlen > 0) {
+        if (pub_payloadlen > MqttConfig::getInstance()->max_packet_size()) {
+            co_return MQTT_RC_CODE::ERR_PAYLOAD_SIZE;
+        }
+
         rc = co_await read_bytes_to_buf(pub_payload, pub_payloadlen, true);
         if (rc != MQTT_RC_CODE::ERR_SUCCESS) {
             co_return rc;
@@ -2022,6 +2016,9 @@ asio::awaitable<MQTT_RC_CODE> MqttSession<SocketType>::handle_subscribe() {
     uint8_t tmp_qos;
     std::list<std::pair<std::string, uint8_t>> sub_topic_list;
     std::string suback_payload;
+    uint32_t curr_subscriptions = this->session_state.sub_topic_map.size();
+    uint32_t new_subscriptions = 0;
+    uint32_t max_subscriptions = MqttConfig::getInstance()->max_subscriptions();
 
     rc = co_await read_uint16(&packet_id, true);
     if (rc != MQTT_RC_CODE::ERR_SUCCESS) {
@@ -2067,13 +2064,31 @@ asio::awaitable<MQTT_RC_CODE> MqttSession<SocketType>::handle_subscribe() {
             rule.topics->emplace(tmp_topic);
 
             if (MqttConfig::getInstance()->acl_check(rule)) {
-                sub_topic_list.emplace_back(std::move(tmp_topic), tmp_qos);
+                if (!this->session_state.sub_topic_map.contains(tmp_topic)) {
+                    new_subscriptions++;
+                }
+
+                if (curr_subscriptions + new_subscriptions >
+                    max_subscriptions) {
+                    tmp_qos = 0x80;
+                } else {
+                    sub_topic_list.emplace_back(std::move(tmp_topic), tmp_qos);
+                }
+
             } else {
                 tmp_qos = 0x80;    // 表示失败
             }
 
         } else {
-            sub_topic_list.emplace_back(std::move(tmp_topic), tmp_qos);
+            if (!this->session_state.sub_topic_map.contains(tmp_topic)) {
+                new_subscriptions++;
+            }
+
+            if (curr_subscriptions + new_subscriptions > max_subscriptions) {
+                tmp_qos = 0x80;
+            } else {
+                sub_topic_list.emplace_back(std::move(tmp_topic), tmp_qos);
+            }
         }
 
         suback_payload.push_back(tmp_qos);
@@ -2085,7 +2100,7 @@ asio::awaitable<MQTT_RC_CODE> MqttSession<SocketType>::handle_subscribe() {
     }
 
     // 添加订阅项
-    add_subscribe(sub_topic_list);
+    this->add_subscribe(sub_topic_list);
 
     co_return MQTT_RC_CODE::ERR_SUCCESS;
 }

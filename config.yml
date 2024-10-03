@@ -102,6 +102,15 @@ server:
     #   - topic: 'auto/topic2'
     #     qos: 2
 
+# 资源限制相关配置
+limits:
+  # 发布消息的最大大小, 协议本身最大支持 256MB, 因此配置超过这个值的大小无效
+  # 支持使用后缀单位 KB 和 MB, 配置为空或者不配置也表示不限制
+  # max_packet_size: '10MB'
+
+  # 每个客户端的最大订阅主题数, 默认不限制
+  # max_subscriptions: 100
+
 # 日志相关配置
 log:
   # 日志文件名 (默认 mqtt-server.log)

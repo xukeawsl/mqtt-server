@@ -14,44 +14,43 @@ public:
 
     bool parse(const std::string& file_name);
 
-    bool auth(const std::string& username, const std::string& password) {
-        if (credentials_.empty()) {
-            return true;
-        }
-        return credentials_.count(username) && credentials_[username] == password;
-    };
+    bool auth(const std::string& username, const std::string& password) const noexcept;
 
-    inline uint32_t connect_timeout() const { return connect_timeout_; }
+    bool acl_check(const mqtt_acl_rule_t& rule) const noexcept;
 
-    inline uint32_t check_timeout_duration() const { return check_timeout_duration_; }
+    inline uint32_t connect_timeout() const noexcept { return connect_timeout_; }
 
-    inline uint32_t check_waiting_map_duration() const { return check_waiting_map_duration_; }
+    inline uint32_t check_timeout_duration() const noexcept { return check_timeout_duration_; }
 
-    inline uint32_t max_resend_count() const { return max_resend_count_; }
+    inline uint32_t check_waiting_map_duration() const noexcept { return check_waiting_map_duration_; }
 
-    inline uint32_t resend_duration() const { return resend_duration_; }
+    inline uint32_t max_resend_count() const noexcept { return max_resend_count_; }
 
-    inline uint32_t max_waiting_time() const { return max_waiting_time_; }
+    inline uint32_t resend_duration() const noexcept { return resend_duration_; }
 
-    inline bool auth() const { return auth_; }
+    inline uint32_t max_waiting_time() const noexcept { return max_waiting_time_; }
 
-    inline std::string name() const { return name_; }
+    inline bool auth() const noexcept { return auth_; }
 
-    inline uint32_t max_rotate_size() const { return max_rotate_size_; }
+    inline uint32_t max_packet_size() const noexcept { return max_packet_size_; }
 
-    inline uint32_t max_rotate_count() const { return max_resend_count_; }
+    inline uint32_t max_subscriptions() const noexcept { return max_subscriptions_; }
 
-    inline uint32_t thread_pool_qsize() const { return thread_pool_qsize_; }
+    inline std::string name() const noexcept { return name_; }
 
-    inline uint32_t thread_count() const { return thread_count_; }
+    inline uint32_t max_rotate_size() const noexcept { return max_rotate_size_; }
 
-    inline bool acl_enable() const { return enable_; }
+    inline uint32_t max_rotate_count() const noexcept { return max_resend_count_; }
 
-    bool acl_check(const mqtt_acl_rule_t& rule);
+    inline uint32_t thread_pool_qsize() const noexcept { return thread_pool_qsize_; }
 
-    inline const auto& auto_subscribe_list() const { return auto_subscribe_list_; }
+    inline uint32_t thread_count() const noexcept { return thread_count_; }
 
-    inline const auto& listeners() const { return listeners_; }
+    inline bool acl_enable() const noexcept { return enable_; }
+
+    inline const auto& auto_subscribe_list() const noexcept { return auto_subscribe_list_; }
+
+    inline const auto& listeners() const noexcept { return listeners_; }
 
 private:
     MqttConfig();
@@ -63,6 +62,8 @@ private:
 
     void parse_listeners(const YAML::Node& node);
 
+    void parse_limits(const YAML::Node& node);
+
 private:
     mqtt_ssl_cfg_t default_ssl_cfg_;
     std::vector<mqtt_listener_cfg_t> listeners_;
@@ -73,6 +74,8 @@ private:
     uint32_t resend_duration_;
     uint32_t max_waiting_time_;
     bool auth_;
+    uint32_t max_packet_size_;
+    uint32_t max_subscriptions_;
     std::string name_;
     uint32_t max_rotate_size_;
     uint32_t max_rotate_count_;

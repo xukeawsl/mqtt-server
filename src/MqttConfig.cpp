@@ -2,6 +2,8 @@
 
 #include "yaml-cpp/yaml.h"
 
+using namespace std::string_view_literals;
+
 MqttConfig* MqttConfig::getInstance() {
     static MqttConfig config;
     return &config;
@@ -15,6 +17,8 @@ MqttConfig::MqttConfig()
       resend_duration_(60),
       max_waiting_time_(60),
       auth_(false),
+      max_packet_size_(std::numeric_limits<uint32_t>::max()),
+      max_subscriptions_(std::numeric_limits<uint32_t>::max()),
       name_("logs/mqtt-server.log"),
       max_rotate_size_(1024 * 1024),
       thread_pool_qsize_(8192),
@@ -81,6 +85,10 @@ bool MqttConfig::parse(const std::string& file_name) {
 
         if (root["listeners"].IsDefined()) {
             parse_listeners(root["listeners"]);
+        }
+
+        if (root["limits"].IsDefined()) {
+            parse_limits(root["limits"]);
         }
 
         if (root["server"].IsDefined()) {
@@ -211,7 +219,22 @@ bool MqttConfig::parse(const std::string& file_name) {
     return true;
 }
 
-bool MqttConfig::acl_check(const mqtt_acl_rule_t& rule) {
+bool MqttConfig::auth(const std::string& username,
+                      const std::string& password) const noexcept {
+    if (credentials_.empty()) {
+        return true;
+    }
+
+    auto it = credentials_.find(username);
+
+    if (it == credentials_.end()) {
+        return false;
+    }
+
+    return it->second == password;
+};
+
+bool MqttConfig::acl_check(const mqtt_acl_rule_t& rule) const noexcept {
     auto state = acl_.check_acl(rule);
     if (state == MQTT_ACL_STATE::NONE) {
         return default_;
@@ -235,13 +258,13 @@ void MqttConfig::parse_listeners(const YAML::Node& node) {
         std::string protocol = address.substr(0, pos);
         cfg.address = address.substr(pos + 3);
 
-        if (protocol == "mqtt") {
+        if (utils::tolower_equal(protocol, "mqtt"sv)) {
             cfg.proto = MQTT_PROTOCOL::MQTT;
-        } else if (protocol == "mqtts") {
+        } else if (utils::tolower_equal(protocol, "mqtts"sv)) {
             cfg.proto = MQTT_PROTOCOL::MQTTS;
-        } else if (protocol == "ws") {
+        } else if (utils::tolower_equal(protocol, "ws"sv)) {
             cfg.proto = MQTT_PROTOCOL::WS;
-        } else if (protocol == "wss") {
+        } else if (utils::tolower_equal(protocol, "wss"sv)) {
             cfg.proto = MQTT_PROTOCOL::WSS;
         } else {
             throw std::runtime_error(
@@ -315,5 +338,33 @@ void MqttConfig::parse_listeners(const YAML::Node& node) {
         }
 
         listeners_.emplace_back(std::move(cfg));
+    }
+}
+
+void MqttConfig::parse_limits(const YAML::Node& node) {
+    if (node["max_packet_size"].IsDefined()) {
+        std::string str_packet_size = node["max_packet_size"].as<std::string>();
+        std::string_view sv_packet_size = str_packet_size;
+
+        auto slen = sv_packet_size.length();
+
+        if (slen > 2 &&
+            utils::tolower_equal(sv_packet_size.substr(slen - 2, 2), "KB"sv)) {
+            max_packet_size_ =
+                atoi(str_packet_size.substr(0, slen - 2).c_str()) * 1024;
+        } else if (slen > 2 &&
+                   utils::tolower_equal(sv_packet_size.substr(slen - 2, 2),
+                                        "MB"sv)) {
+            max_packet_size_ =
+                atoi(str_packet_size.substr(0, slen - 2).c_str()) * 1024 * 1024;
+        } else {
+            max_packet_size_ = atoi(str_packet_size.c_str());
+        }
+
+        SPDLOG_INFO("max_packet_size={}", max_packet_size_);
+    }
+
+    if (node["max_subscriptions"].IsDefined()) {
+        max_subscriptions_ = node["max_subscriptions"].as<uint32_t>();
     }
 }

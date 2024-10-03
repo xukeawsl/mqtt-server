@@ -99,7 +99,7 @@ bool MqttAcl::load_acl(const std::string& acl_file) {
     return true;
 }
 
-MQTT_ACL_STATE MqttAcl::check_acl(const mqtt_acl_rule_t& rule) {
+MQTT_ACL_STATE MqttAcl::check_acl(const mqtt_acl_rule_t& rule) const noexcept {
     for (auto& acl_rule : acl_) {
         auto state = check_acl_detail(acl_rule, rule);
         if (state != MQTT_ACL_STATE::NONE) {
@@ -109,8 +109,9 @@ MQTT_ACL_STATE MqttAcl::check_acl(const mqtt_acl_rule_t& rule) {
     return MQTT_ACL_STATE::NONE;
 }
 
-MQTT_ACL_STATE MqttAcl::check_acl_detail(const mqtt_acl_rule_t& acl_rule,
-                                         const mqtt_acl_rule_t& rule) {
+MQTT_ACL_STATE MqttAcl::check_acl_detail(
+    const mqtt_acl_rule_t& acl_rule,
+    const mqtt_acl_rule_t& rule) const noexcept {
     if (rule.type != acl_rule.type) {
         return MQTT_ACL_STATE::NONE;
     }
