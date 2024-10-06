@@ -111,6 +111,18 @@ limits:
   # 每个客户端的最大订阅主题数, 默认不限制
   # max_subscriptions: 100
 
+  # 订阅速率限制, 支持突发流量, req_per_second 设置每秒处理的请求数, 支持小数, 不配置则不限速
+  # brust 设置突发请求数, 当值大于 req_per_second 时才有效, 支持小数, 如果不配置则与 req_per_second 相同
+  # sub_rate_limit:
+  #   req_per_second: 0.1
+  #   brust: 1
+  
+  # 发布速率限制, 参数含义同上, 注意如果请求被限流会延迟处理, 且等待延迟处理的这段时间无法
+  # 立即处理新的请求, 而是排队等待处理, 不过消息转发还是可以正常进行
+  # pub_rate_limit:
+  #   req_per_second: 1
+  #   brust: 3
+
 # 日志相关配置
 log:
   # 日志文件名 (默认 mqtt-server.log)

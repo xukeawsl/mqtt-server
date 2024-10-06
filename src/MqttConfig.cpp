@@ -19,6 +19,8 @@ MqttConfig::MqttConfig()
       auth_(false),
       max_packet_size_(std::numeric_limits<uint32_t>::max()),
       max_subscriptions_(std::numeric_limits<uint32_t>::max()),
+      sub_rate_limit_(0, 0),
+      pub_rate_limit_(0, 0),
       name_("logs/mqtt-server.log"),
       max_rotate_size_(1024 * 1024),
       thread_pool_qsize_(8192),
@@ -366,5 +368,33 @@ void MqttConfig::parse_limits(const YAML::Node& node) {
 
     if (node["max_subscriptions"].IsDefined()) {
         max_subscriptions_ = node["max_subscriptions"].as<uint32_t>();
+    }
+
+    if (node["sub_rate_limit"].IsDefined()) {
+        auto nodeSub = node["sub_rate_limit"];
+
+        if (nodeSub["req_per_second"].IsDefined()) {
+            sub_rate_limit_.first = nodeSub["req_per_second"].as<double>();
+        }
+
+        if (nodeSub["brust"].IsDefined()) {
+            sub_rate_limit_.second = nodeSub["brust"].as<double>();
+        } else {
+            sub_rate_limit_.second = sub_rate_limit_.first;
+        }
+    }
+
+    if (node["pub_rate_limit"].IsDefined()) {
+        auto nodePub = node["pub_rate_limit"];
+
+        if (nodePub["req_per_second"].IsDefined()) {
+            pub_rate_limit_.first = nodePub["req_per_second"].as<double>();
+        }
+
+        if (nodePub["brust"].IsDefined()) {
+            pub_rate_limit_.second = nodePub["brust"].as<double>();
+        } else {
+            pub_rate_limit_.second = pub_rate_limit_.first;
+        }
     }
 }

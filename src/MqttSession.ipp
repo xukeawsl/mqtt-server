@@ -31,6 +31,19 @@ MqttSession<SocketType>::MqttSession(
     this->keep_alive_timer.expires_at(
         std::chrono::steady_clock::time_point::max());
     this->check_timer.expires_at(std::chrono::steady_clock::time_point::max());
+
+    auto [sub_rate, sub_brust] = MqttConfig::getInstance()->sub_rate_limit();
+    auto [pub_rate, pub_brust] = MqttConfig::getInstance()->pub_rate_limit();
+
+    if (sub_rate > 0) {
+        this->session_state.sub_limiter =
+            std::make_unique<MqttTokenBucket>(sub_rate, sub_brust);
+    }
+
+    if (pub_rate > 0) {
+        this->session_state.pub_limiter =
+            std::make_unique<MqttTokenBucket>(pub_rate, pub_brust);
+    }
 }
 
 template <typename SocketType>
@@ -289,6 +302,10 @@ void MqttSession<SocketType>::move_session_state(
             std::move(this->session_state.sub_topic_map);
         new_session->session_state.waiting_map =
             std::move(this->session_state.waiting_map);
+        new_session->session_state.sub_limiter =
+            std::move(this->session_state.sub_limiter);
+        new_session->session_state.pub_limiter =
+            std::move(this->session_state.pub_limiter);
     }
 }
 
@@ -1737,6 +1754,24 @@ asio::awaitable<MQTT_RC_CODE> MqttSession<SocketType>::handle_publish() {
     uint32_t pub_payloadlen;
     std::string pub_payload;
 
+    // 发布限流检查, 如果速率超过设置的值则需要延迟处理
+    if (this->session_state.pub_limiter &&
+        !this->session_state.pub_limiter->tryConsume()) {
+        asio::error_code ec;
+        asio::steady_timer retry_timer(this->keep_alive_timer.get_executor());
+
+        while (!this->session_state.pub_limiter->tryConsume()) {
+            retry_timer.expires_after(std::chrono::seconds(1));
+
+            co_await retry_timer.async_wait(
+                asio::redirect_error(asio::use_awaitable, ec));
+
+            if (ec) {
+                break;
+            }
+        }
+    }
+
     if (qos == 3 || (qos == 1 && dup == 1)) {
         co_return MQTT_RC_CODE::ERR_MALFORMED_PACKET;
     }
@@ -2019,6 +2054,24 @@ asio::awaitable<MQTT_RC_CODE> MqttSession<SocketType>::handle_subscribe() {
     uint32_t curr_subscriptions = this->session_state.sub_topic_map.size();
     uint32_t new_subscriptions = 0;
     uint32_t max_subscriptions = MqttConfig::getInstance()->max_subscriptions();
+
+    // 订阅限流检查, 如果速率超过设置的值则需要延迟处理
+    if (this->session_state.sub_limiter &&
+        !this->session_state.sub_limiter->tryConsume()) {
+        asio::error_code ec;
+        asio::steady_timer retry_timer(this->keep_alive_timer.get_executor());
+
+        while (!this->session_state.sub_limiter->tryConsume()) {
+            retry_timer.expires_after(std::chrono::seconds(1));
+
+            co_await retry_timer.async_wait(
+                asio::redirect_error(asio::use_awaitable, ec));
+
+            if (ec) {
+                break;
+            }
+        }
+    }
 
     rc = co_await read_uint16(&packet_id, true);
     if (rc != MQTT_RC_CODE::ERR_SUCCESS) {

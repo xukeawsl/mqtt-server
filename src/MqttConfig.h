@@ -36,6 +36,10 @@ public:
 
     inline uint32_t max_subscriptions() const noexcept { return max_subscriptions_; }
 
+    inline std::pair<double, double> sub_rate_limit() const noexcept { return sub_rate_limit_; }
+
+    inline std::pair<double, double> pub_rate_limit() const noexcept { return pub_rate_limit_; }
+
     inline std::string name() const noexcept { return name_; }
 
     inline uint32_t max_rotate_size() const noexcept { return max_rotate_size_; }
@@ -76,6 +80,8 @@ private:
     bool auth_;
     uint32_t max_packet_size_;
     uint32_t max_subscriptions_;
+    std::pair<double, double> sub_rate_limit_;
+    std::pair<double, double> pub_rate_limit_;
     std::string name_;
     uint32_t max_rotate_size_;
     uint32_t max_rotate_count_;
