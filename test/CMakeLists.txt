@@ -1,10 +1,8 @@
-cmake_minimum_required(VERSION 3.22)
+cmake_minimum_required(VERSION 3.10)
 
 project(mqtt-server-test VERSION 3.1.1 LANGUAGES CXX)
 
-
 file(GLOB_RECURSE test_sources src/*.cpp)
-
 
 foreach(file ${test_sources})
     string(REGEX REPLACE "(.*/)([a-zA-Z0-9_ ]+)(\.cpp)" "\\2" test_name ${file}) 
