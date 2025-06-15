@@ -7,6 +7,9 @@ include(cmake/settings.cmake)
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED TRUE)
 set(CMAKE_POSITION_INDEPENDENT_CODE TRUE)
+set(ENABLE_PUSH OFF)
+set(ENABLE_COMPRESSION OFF)
+set(ENABLE_TESTING OFF)
 
 if(NOT CMAKE_BUILD_TYPE)
     set(CMAKE_BUILD_TYPE "Release" CACHE STRING "Choose Release or Debug" FORCE)
@@ -25,6 +28,7 @@ endif()
 
 add_subdirectory(third-party/spdlog)
 add_subdirectory(third-party/yaml-cpp)
+add_subdirectory(third-party/prometheus-cpp)
 
 message(STATUS "Build ${PROJECT_NAME}: ${PROJECT_VERSION}")
 message(STATUS "Build type: ${CMAKE_BUILD_TYPE}")
@@ -72,9 +76,15 @@ if (CMAKE_SYSTEM_NAME STREQUAL "Linux")
     target_link_libraries(${PROJECT_NAME} PUBLIC
         pthread
         spdlog::spdlog
-        yaml-cpp::yaml-cpp)
+        yaml-cpp::yaml-cpp
+        prometheus-cpp::pull)
 elseif(CMAKE_SYSTEM_NAME STREQUAL "Windows")
-    target_link_libraries(${PROJECT_NAME} PUBLIC ws2_32 wsock32 spdlog::spdlog yaml-cpp::yaml-cpp)
+    target_link_libraries(${PROJECT_NAME} PUBLIC
+        ws2_32
+        wsock32
+        spdlog::spdlog
+        yaml-cpp::yaml-cpp
+        prometheus-cpp::pull)
 else()
     message(STATUS "This operating system is not supported")
 endif()
