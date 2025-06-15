@@ -61,6 +61,18 @@ cmake -DLOG_LEVEL=Error ..
 .\mqtt-server.exe
 ```
 
+### 4. 运行测试(以 Ubuntu 为例)
+```bash
+# 安装依赖
+apt install libmosquitto-dev
+
+# 开启选项编译后运行服务
+cmake -DENABLE_UNIT_TESTING=On .. && cmake --build . && ./mqtt-server
+
+# 另开窗口执行测试用例
+make test
+```
+
 ## 文档
 
 关于如何使用 `SSL/TLS` 或其他详细内容见 [wiki](https://github.com/xukeawsl/mqtt-server/wiki) 页面

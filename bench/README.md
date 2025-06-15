@@ -16,7 +16,7 @@
 
 主要与 [emqx](https://github.com/emqx/emqx) 进行性能对比，由于 `emqtt-bench` 工具限制了请求速率，无法
 很好的比较两者的差距，在 Connect Benchmark 和 Sub Benchmark 两者耗时相同，Pub Benchmark 下创建 100 个连接，每个连接以每秒 1000 条消息的发送速率下， `emqx` 的发布速率大概是 5w，`mqtt-server` 的发布速率大概是 6w,当
-连接数较大时 `emqtt-bench` 所消耗内存较大，导致本机无法测试上万数量的并发连接，因此后续使用 `mqtt-benchmark` 进行测试，不过使用 `mqt--benchmark` 也只能测试最多 `C20k` 的样子。
+连接数较大时 `emqtt-bench` 所消耗内存较大，导致本机无法测试上万数量的并发连接，因此后续使用 `mqtt-benchmark` 进行测试，不过使用 `mqtt-benchmark` 也只能测试最多 `C20k` 的样子。
 
 ### 1. 并发连接测试
 
