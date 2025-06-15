@@ -28,6 +28,14 @@ ssl:
   # 来生成参数 (默认不使用)
   # dhparam: '../certs/dh4096.pem'
 
+# prometheus 监控指标相关配置, http://<address>:<port>/metrics 可查看所有指标
+metrics:
+  enable: true
+  address: '0.0.0.0'
+  port: 8085
+
+# mqtt 监听的地址和端口配置, 可以配置多个监听地址和端口, 每个监听地址可以配置不同的协议
+# address 可以是 IP 地址或域名, 端口可以是 0-65535 的整数
 listeners:
   # 非加密 tcp 连接
   - address: 'mqtt://0.0.0.0'

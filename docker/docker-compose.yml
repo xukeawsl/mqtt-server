@@ -8,11 +8,13 @@ services:
 
     # 1883 用于 TCP, 8883 用于 TLS
     # 8084 用于 WebSocket, 8084 用于 WebSocket with TLS
+    # 8085 用于 Prometheus 监控指标采集
     ports:
       - 1883:1883
       - 8883:8883
       - 8083:8083
       - 8084:8084
+      - 8085:8085
 
     volumes:
       # 挂载存放日志的目录

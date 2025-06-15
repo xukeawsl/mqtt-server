@@ -183,3 +183,9 @@ struct mqtt_listener_cfg_t {
     uint16_t port;
     mqtt_ssl_cfg_t ssl_cfg;
 };
+
+struct mqtt_metrics_cfg_t {
+    bool enable;
+    std::string address;
+    uint16_t port;
+};

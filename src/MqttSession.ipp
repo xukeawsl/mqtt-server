@@ -54,6 +54,14 @@ void MqttSession<SocketType>::start() {
 #ifdef MQ_WITH_TLS
     if constexpr (std::is_same_v<SocketType,
                                  asio::ssl::stream<asio::ip::tcp::socket>>) {
+        if (this->is_websocket) {
+            MqttMetrics::getInstance()->get_mqtt_conn_metrics().increment(
+                MQTT_PROTOCOL::WSS);
+        } else {
+            MqttMetrics::getInstance()->get_mqtt_conn_metrics().increment(
+                MQTT_PROTOCOL::MQTTS);
+        }
+
         asio::co_spawn(
             socket.get_executor(),
             [self = this->shared_from_this()] {
@@ -61,9 +69,25 @@ void MqttSession<SocketType>::start() {
             },
             asio::detached);
     } else {
+        if (this->is_websocket) {
+            MqttMetrics::getInstance()->get_mqtt_conn_metrics().increment(
+                MQTT_PROTOCOL::WS);
+        } else {
+            MqttMetrics::getInstance()->get_mqtt_conn_metrics().increment(
+                MQTT_PROTOCOL::MQTT);
+        }
+
         handle_session();
     }
 #else
+    if (this->is_websocket) {
+        MqttMetrics::getInstance()->get_mqtt_conn_metrics().increment(
+            MQTT_PROTOCOL::WS);
+    } else {
+        MqttMetrics::getInstance()->get_mqtt_conn_metrics().increment(
+            MQTT_PROTOCOL::MQTT);
+    }
+
     handle_session();
 #endif
 }
@@ -106,17 +130,45 @@ std::string MqttSession<SocketType>::get_session_id() {
 
 template <typename SocketType>
 void MqttSession<SocketType>::disconnect() {
+    if (!this->is_open()) {
+        return;
+    }
+
     asio::error_code ignored_ec;
 #ifdef MQ_WITH_TLS
     if constexpr (std::is_same_v<SocketType,
                                  asio::ssl::stream<asio::ip::tcp::socket>>) {
         this->socket.shutdown(ignored_ec);
         this->socket.next_layer().close(ignored_ec);
+
+        if (this->is_websocket) {
+            MqttMetrics::getInstance()->get_mqtt_conn_metrics().decrement(
+                MQTT_PROTOCOL::WSS);
+        } else {
+            MqttMetrics::getInstance()->get_mqtt_conn_metrics().decrement(
+                MQTT_PROTOCOL::MQTTS);
+        }
     } else {
         this->socket.close(ignored_ec);
+
+        if (this->is_websocket) {
+            MqttMetrics::getInstance()->get_mqtt_conn_metrics().decrement(
+                MQTT_PROTOCOL::WS);
+        } else {
+            MqttMetrics::getInstance()->get_mqtt_conn_metrics().decrement(
+                MQTT_PROTOCOL::MQTT);
+        }
     }
 #else
     this->socket.close(ignored_ec);
+
+    if (this->is_websocket) {
+        MqttMetrics::getInstance()->get_mqtt_conn_metrics().decrement(
+            MQTT_PROTOCOL::WS);
+    } else {
+        MqttMetrics::getInstance()->get_mqtt_conn_metrics().decrement(
+            MQTT_PROTOCOL::MQTT);
+    }
 #endif
     this->cond_timer.cancel(ignored_ec);
     this->keep_alive_timer.cancel(ignored_ec);

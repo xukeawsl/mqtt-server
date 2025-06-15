@@ -56,6 +56,16 @@ public:
 
     inline const auto& listeners() const noexcept { return listeners_; }
 
+    inline bool metrics_enable() const noexcept { return metrics_cfg_.enable; }
+
+    inline std::string metrics_address() const noexcept {
+        return metrics_cfg_.address;
+    }
+
+    inline uint16_t metrics_port() const noexcept {
+        return metrics_cfg_.port;
+    }
+
 private:
     MqttConfig();
     ~MqttConfig() = default;
@@ -93,4 +103,5 @@ private:
     bool default_;
     MqttAcl acl_;
     std::list<std::pair<std::string, uint8_t>> auto_subscribe_list_;
+    mqtt_metrics_cfg_t metrics_cfg_;
 };

@@ -11,6 +11,12 @@ MqttServer::~MqttServer() {
 
 void MqttServer::run() noexcept {
     try {
+        if (MqttConfig::getInstance()->metrics_enable()) {
+            MqttMetrics::getInstance()->init(
+                MqttConfig::getInstance()->metrics_address(),
+                MqttConfig::getInstance()->metrics_port());
+        }
+
         init();
 
         SPDLOG_INFO("Mqtt Server Start");

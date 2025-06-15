@@ -27,6 +27,8 @@ mqtt-server 是一个使用 C++20 协程开发的支持 MQTT `v3.1.1` 协议的�
 
 * 支持 WebSocket 协议
 
+* 支持使用 Prometheus 采集监控指标
+
 ## 使用
 
 ### 1. 克隆源代码
