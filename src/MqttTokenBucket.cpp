@@ -3,9 +3,8 @@
 MqttTokenBucket::MqttTokenBucket(double tokensPerSecond, double maxTokens)
     : tokensPerSecond_(tokensPerSecond),
       maxTokens_(maxTokens),
-      tokens_(maxTokens) {
-    lastRefillTime_ = std::chrono::steady_clock::now();
-}
+      tokens_(maxTokens),
+      lastRefillTime_(std::chrono::steady_clock::now()) {}
 
 bool MqttTokenBucket::tryConsume() noexcept {
     refillTokens();    // 在消费之前先补充令牌
