@@ -28,6 +28,7 @@ endif()
 
 add_subdirectory(third-party/spdlog)
 add_subdirectory(third-party/yaml-cpp)
+add_subdirectory(third-party/yalantinglibs)
 add_subdirectory(third-party/prometheus-cpp)
 
 message(STATUS "Build ${PROJECT_NAME}: ${PROJECT_VERSION}")
@@ -64,9 +65,10 @@ file(GLOB_RECURSE hrds ${PROJECT_SOURCE_DIR}/src/*.h)
 file(GLOB_RECURSE ipps ${PROJECT_SOURCE_DIR}/src/*.ipp)
 
 include_directories(
-    third-party/asio/include
     third-party/sha1
     third-party/picohttpparser
+    third-party/yalantinglibs/include
+    third-party/yalantinglibs/include/ylt/thirdparty
     src/
 )
 
