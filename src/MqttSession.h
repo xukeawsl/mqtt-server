@@ -4,9 +4,8 @@
 #include "MqttConfig.h"
 #include "MqttSessionState.h"
 #include "MqttUtils.h"
-#include "picohttpparser.h"
 #include "MqttWebSocket.h"
-#include "MqttMetrics.h"
+#include "MqttExposer.h"
 
 template <typename SocketType>
 class MqttSession: public std::enable_shared_from_this<MqttSession<SocketType>> {

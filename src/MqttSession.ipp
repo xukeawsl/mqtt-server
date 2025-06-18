@@ -55,11 +55,9 @@ void MqttSession<SocketType>::start() {
     if constexpr (std::is_same_v<SocketType,
                                  asio::ssl::stream<asio::ip::tcp::socket>>) {
         if (this->is_websocket) {
-            MqttMetrics::getInstance()->get_mqtt_conn_metrics().increment(
-                MQTT_PROTOCOL::WSS);
+            MqttExposer::getInstance()->inc_mqtt_active_connections("wss");
         } else {
-            MqttMetrics::getInstance()->get_mqtt_conn_metrics().increment(
-                MQTT_PROTOCOL::MQTTS);
+            MqttExposer::getInstance()->inc_mqtt_active_connections("mqtts");
         }
 
         asio::co_spawn(
@@ -70,22 +68,18 @@ void MqttSession<SocketType>::start() {
             asio::detached);
     } else {
         if (this->is_websocket) {
-            MqttMetrics::getInstance()->get_mqtt_conn_metrics().increment(
-                MQTT_PROTOCOL::WS);
+            MqttExposer::getInstance()->inc_mqtt_active_connections("ws");
         } else {
-            MqttMetrics::getInstance()->get_mqtt_conn_metrics().increment(
-                MQTT_PROTOCOL::MQTT);
+            MqttExposer::getInstance()->inc_mqtt_active_connections("mqtt");
         }
 
         handle_session();
     }
 #else
     if (this->is_websocket) {
-        MqttMetrics::getInstance()->get_mqtt_conn_metrics().increment(
-            MQTT_PROTOCOL::WS);
+        MqttExposer::getInstance()->inc_mqtt_active_connections("ws");
     } else {
-        MqttMetrics::getInstance()->get_mqtt_conn_metrics().increment(
-            MQTT_PROTOCOL::MQTT);
+        MqttExposer::getInstance()->inc_mqtt_active_connections("mqtt");
     }
 
     handle_session();
@@ -142,32 +136,26 @@ void MqttSession<SocketType>::disconnect() {
         this->socket.next_layer().close(ignored_ec);
 
         if (this->is_websocket) {
-            MqttMetrics::getInstance()->get_mqtt_conn_metrics().decrement(
-                MQTT_PROTOCOL::WSS);
+            MqttExposer::getInstance()->dec_mqtt_active_connections("wss");
         } else {
-            MqttMetrics::getInstance()->get_mqtt_conn_metrics().decrement(
-                MQTT_PROTOCOL::MQTTS);
+            MqttExposer::getInstance()->dec_mqtt_active_connections("mqtts");
         }
     } else {
         this->socket.close(ignored_ec);
 
         if (this->is_websocket) {
-            MqttMetrics::getInstance()->get_mqtt_conn_metrics().decrement(
-                MQTT_PROTOCOL::WS);
+            MqttExposer::getInstance()->dec_mqtt_active_connections("ws");
         } else {
-            MqttMetrics::getInstance()->get_mqtt_conn_metrics().decrement(
-                MQTT_PROTOCOL::MQTT);
+            MqttExposer::getInstance()->dec_mqtt_active_connections("mqtt");
         }
     }
 #else
     this->socket.close(ignored_ec);
 
     if (this->is_websocket) {
-        MqttMetrics::getInstance()->get_mqtt_conn_metrics().decrement(
-            MQTT_PROTOCOL::WS);
+        MqttExposer::getInstance()->dec_mqtt_active_connections("ws");
     } else {
-        MqttMetrics::getInstance()->get_mqtt_conn_metrics().decrement(
-            MQTT_PROTOCOL::MQTT);
+        MqttExposer::getInstance()->dec_mqtt_active_connections("mqtt");
     }
 #endif
     this->cond_timer.cancel(ignored_ec);
@@ -1253,10 +1241,12 @@ MqttSession<SocketType>::handle_websocket_handshake() {
     size_t url_len;
     int minor_version;
     size_t num_headers = 100;
-    std::vector<phr_header> headers(num_headers);
+    std::vector<coro_http::http_header> headers(num_headers);
     int pret;
     uint8_t sha1buf[20], key_src[60];
     char accept_key[29];
+    bool has_connection = false, has_close = false, has_upgrade = false,
+         has_query = false;
 
     size_t data_len = co_await asio::async_read_until(
         this->socket, this->head_buf, "\r\n\r\n",
@@ -1266,9 +1256,10 @@ MqttSession<SocketType>::handle_websocket_handshake() {
     }
 
     const char* data = asio::buffer_cast<const char*>(this->head_buf.data());
-    pret =
-        phr_parse_request(data, data_len, &method, &method_len, &url, &url_len,
-                          &minor_version, headers.data(), &num_headers, 0);
+    pret = coro_http::detail::phr_parse_request(
+        data, data_len, &method, &method_len, &url, &url_len, &minor_version,
+        headers.data(), &num_headers, 0, has_connection, has_close, has_upgrade,
+        has_query);
     if (pret < 0) {
         SPDLOG_WARN("parse http head failed");
         co_return MQTT_RC_CODE::ERR_PROTOCOL;
@@ -1279,11 +1270,8 @@ MqttSession<SocketType>::handle_websocket_handshake() {
     auto get_header_value =
         [&headers, num_headers](std::string_view key) -> std::string_view {
         for (size_t i = 0; i < num_headers; i++) {
-            if (utils::tolower_equal(
-                    key,
-                    std::string_view(headers[i].name, headers[i].name_len))) {
-                return utils::trim_sv(
-                    std::string_view(headers[i].value, headers[i].value_len));
+            if (utils::tolower_equal(key, headers[i].name)) {
+                return utils::trim_sv(headers[i].value);
             }
         }
         return "";

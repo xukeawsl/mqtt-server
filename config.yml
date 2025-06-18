@@ -29,10 +29,15 @@ ssl:
   # dhparam: '../certs/dh4096.pem'
 
 # prometheus 监控指标相关配置, http://<address>:<port>/metrics 可查看所有指标
-metrics:
+exposer:
+  # 是否启用 prometheus exposer 服务, 默认开启
   enable: true
+  # prometheus exposer 服务的地址, 默认 0.0.0.0
   address: '0.0.0.0'
+  # prometheus exposer 服务的端口, 默认 8085
   port: 8085
+  # prometheus exposer 服务的线程数, 默认 1
+  thread_count: 1
 
 # mqtt 监听的地址和端口配置, 可以配置多个监听地址和端口, 每个监听地址可以配置不同的协议
 # address 可以是 IP 地址或域名, 端口可以是 0-65535 的整数

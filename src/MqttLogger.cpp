@@ -2,13 +2,12 @@
 
 #include "MqttConfig.h"
 
-MqttLogger* MqttLogger::getInstance() {
-    static MqttLogger MqttLogger;
-    return &MqttLogger;
-}
+bool MqttLogger::init() {
+    std::string log_file = MqttConfig::getInstance()->name();
+    long unsigned max_rotateSize = MqttConfig::getInstance()->max_rotate_size();
+    long unsigned max_rotateCount =
+        MqttConfig::getInstance()->max_rotate_count();
 
-bool MqttLogger::init(const std::string& log_file, long unsigned max_rotateSize,
-                      long unsigned max_rotateCount) {
     try {
         spdlog::init_thread_pool(MqttConfig::getInstance()->thread_pool_qsize(),
                                  MqttConfig::getInstance()->thread_count());
@@ -60,3 +59,5 @@ bool MqttLogger::init(const std::string& log_file, long unsigned max_rotateSize,
     }
     return true;
 }
+
+void MqttLogger::shutdown() { spdlog::shutdown(); }

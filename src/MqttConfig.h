@@ -1,17 +1,22 @@
 #pragma once
 
-#include "MqttCommon.h"
 #include "MqttAcl.h"
+#include "MqttCommon.h"
+#include "MqttSingleton.h"
 
 namespace YAML
 {
     class Node;
 }
 
-class MqttConfig {
-public:
-    static MqttConfig* getInstance();
+class MqttConfig : public MqttSingleton<MqttConfig> {
+    friend class MqttSingleton<MqttConfig>;
 
+protected:
+    MqttConfig();
+    ~MqttConfig() = default;
+
+public:
     bool parse(const std::string& file_name);
 
     bool auth(const std::string& username, const std::string& password) const noexcept;
@@ -56,24 +61,21 @@ public:
 
     inline const auto& listeners() const noexcept { return listeners_; }
 
-    inline bool metrics_enable() const noexcept { return metrics_cfg_.enable; }
+    inline bool exposer_enable() const noexcept { return exposer_cfg_.enable; }
 
-    inline std::string metrics_address() const noexcept {
-        return metrics_cfg_.address;
+    inline std::string exposer_address() const noexcept {
+        return exposer_cfg_.address;
     }
 
-    inline uint16_t metrics_port() const noexcept {
-        return metrics_cfg_.port;
+    inline uint16_t exposer_port() const noexcept {
+        return exposer_cfg_.port;
+    }
+
+    inline uint32_t exposer_thread_count() const noexcept {
+        return exposer_cfg_.thread_count;
     }
 
 private:
-    MqttConfig();
-    ~MqttConfig() = default;
-    MqttConfig(const MqttConfig&) = delete;
-    MqttConfig& operator=(const MqttConfig&) = delete;
-    MqttConfig(MqttConfig&&) = delete;
-    MqttConfig& operator=(MqttConfig&&) = delete;
-
     void parse_listeners(const YAML::Node& node);
 
     void parse_limits(const YAML::Node& node);
@@ -103,5 +105,5 @@ private:
     bool default_;
     MqttAcl acl_;
     std::list<std::pair<std::string, uint8_t>> auto_subscribe_list_;
-    mqtt_metrics_cfg_t metrics_cfg_;
+    mqtt_exposer_cfg_t exposer_cfg_;
 };

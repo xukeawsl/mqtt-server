@@ -4,11 +4,6 @@
 
 using namespace std::string_view_literals;
 
-MqttConfig* MqttConfig::getInstance() {
-    static MqttConfig config;
-    return &config;
-}
-
 MqttConfig::MqttConfig()
     : connect_timeout_(10),
       check_timeout_duration_(1),
@@ -31,7 +26,7 @@ MqttConfig::MqttConfig()
     default_ssl_cfg_.verify_mode = MQTT_SSL_VERIFY::NONE;
     default_ssl_cfg_.fail_if_no_peer_cert = false;
 
-    metrics_cfg_.enable = false;
+    exposer_cfg_.enable = false;
 }
 
 bool MqttConfig::parse(const std::string& file_name) {
@@ -87,19 +82,31 @@ bool MqttConfig::parse(const std::string& file_name) {
             default_ssl_cfg_.dhparam = nodeSSL["dhparam"].as<std::string>();
         }
 
-        if (root["metrics"].IsDefined()) {
-            auto nodeMetrics = root["metrics"];
+        exposer_cfg_ = {
+            .enable = true,
+            .address = "0.0.0.0",
+            .port = 8085,
+            .thread_count = 1,
+        };
 
-            if (nodeMetrics["enable"].IsDefined()) {
-                metrics_cfg_.enable = nodeMetrics["enable"].as<bool>();
+        if (root["exposer"].IsDefined()) {
+            auto nodeExposer = root["exposer"];
+
+            if (nodeExposer["enable"].IsDefined()) {
+                exposer_cfg_.enable = nodeExposer["enable"].as<bool>();
             }
 
-            if (metrics_cfg_.enable && (!nodeMetrics["address"].IsDefined() ||
-                                        !nodeMetrics["port"].IsDefined())) {
-                throw std::runtime_error("No metrics address or port");
-            } else {
-                metrics_cfg_.address = nodeMetrics["address"].as<std::string>();
-                metrics_cfg_.port = nodeMetrics["port"].as<uint16_t>();
+            if (nodeExposer["address"].IsDefined()) {
+                exposer_cfg_.address = nodeExposer["address"].as<std::string>();
+            }
+
+            if (nodeExposer["port"].IsDefined()) {
+                exposer_cfg_.port = nodeExposer["port"].as<uint16_t>();
+            }
+
+            if (nodeExposer["thread_count"].IsDefined()) {
+                exposer_cfg_.thread_count =
+                    nodeExposer["thread_count"].as<uint32_t>();
             }
         }
 

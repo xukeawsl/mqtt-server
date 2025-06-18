@@ -7,9 +7,6 @@ include(cmake/settings.cmake)
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED TRUE)
 set(CMAKE_POSITION_INDEPENDENT_CODE TRUE)
-set(ENABLE_PUSH OFF)
-set(ENABLE_COMPRESSION OFF)
-set(ENABLE_TESTING OFF)
 
 if(NOT CMAKE_BUILD_TYPE)
     set(CMAKE_BUILD_TYPE "Release" CACHE STRING "Choose Release or Debug" FORCE)
@@ -29,7 +26,6 @@ endif()
 add_subdirectory(third-party/spdlog)
 add_subdirectory(third-party/yaml-cpp)
 add_subdirectory(third-party/yalantinglibs)
-add_subdirectory(third-party/prometheus-cpp)
 
 message(STATUS "Build ${PROJECT_NAME}: ${PROJECT_VERSION}")
 message(STATUS "Build type: ${CMAKE_BUILD_TYPE}")
@@ -64,12 +60,13 @@ file(GLOB_RECURSE srcs ${PROJECT_SOURCE_DIR}/src/*.cpp)
 file(GLOB_RECURSE hrds ${PROJECT_SOURCE_DIR}/src/*.h)
 file(GLOB_RECURSE ipps ${PROJECT_SOURCE_DIR}/src/*.ipp)
 
-include_directories(
-    third-party/sha1
-    third-party/picohttpparser
-    third-party/yalantinglibs/include
-    third-party/yalantinglibs/include/ylt/thirdparty
-    src/
+include_directories(${PROJECT_SOURCE_DIR}/src)
+
+include_directories(SYSTEM
+    ${PROJECT_SOURCE_DIR}/third-party/sha1
+    ${PROJECT_SOURCE_DIR}/third-party/yalantinglibs/include
+    ${PROJECT_SOURCE_DIR}/third-party/yalantinglibs/include/ylt/thirdparty
+    ${PROJECT_SOURCE_DIR}/third-party/yalantinglibs/include/ylt/standalone
 )
 
 add_executable(${PROJECT_NAME} main.cpp ${srcs})
@@ -78,15 +75,13 @@ if (CMAKE_SYSTEM_NAME STREQUAL "Linux")
     target_link_libraries(${PROJECT_NAME} PUBLIC
         pthread
         spdlog::spdlog
-        yaml-cpp::yaml-cpp
-        prometheus-cpp::pull)
+        yaml-cpp::yaml-cpp)
 elseif(CMAKE_SYSTEM_NAME STREQUAL "Windows")
     target_link_libraries(${PROJECT_NAME} PUBLIC
         ws2_32
         wsock32
         spdlog::spdlog
-        yaml-cpp::yaml-cpp
-        prometheus-cpp::pull)
+        yaml-cpp::yaml-cpp)
 else()
     message(STATUS "This operating system is not supported")
 endif()

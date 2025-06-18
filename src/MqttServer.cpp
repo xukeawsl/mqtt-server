@@ -4,26 +4,17 @@
 
 MqttServer::MqttServer() : io_context(1), signals(io_context) {}
 
-MqttServer::~MqttServer() {
-    SPDLOG_INFO("Mqtt Server Stopped");
-    spdlog::shutdown();
-}
+MqttServer::~MqttServer() {}
 
 void MqttServer::run() noexcept {
     try {
-        if (MqttConfig::getInstance()->metrics_enable()) {
-            MqttMetrics::getInstance()->init(
-                MqttConfig::getInstance()->metrics_address(),
-                MqttConfig::getInstance()->metrics_port());
-        }
-
         init();
 
-        SPDLOG_INFO("Mqtt Server Start");
+        SPDLOG_INFO("Mqtt Server started successfully");
 
         io_context.run();
     } catch (const std::exception& e) {
-        SPDLOG_ERROR("Mqtt Server Failed to Start : ERR_MSG = [{}])",
+        SPDLOG_ERROR("Mqtt Server failed to start : ERR_MSG = [{}])",
                      std::string(e.what()));
     }
 }
@@ -58,7 +49,10 @@ void MqttServer::init() {
     }
 }
 
-void MqttServer::stop() { io_context.stop(); }
+void MqttServer::stop() {
+    io_context.stop();
+    SPDLOG_INFO("Mqtt Server stopped successfully");
+}
 
 asio::awaitable<void> MqttServer::handle_accept(
     asio::ip::tcp::acceptor acceptor, const mqtt_listener_cfg_t& cfg) {

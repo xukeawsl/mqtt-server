@@ -3,6 +3,7 @@
 #include <list>
 #include <regex>
 #include <queue>
+#include <array>
 #include <vector>
 #include <string>
 #include <memory>
@@ -15,6 +16,8 @@
 #include "sha1.hpp"
 #include "asio.hpp"
 #include "asio/experimental/channel.hpp"
+#include "ylt/metric.hpp"
+#include "ylt/coro_http/coro_http_server.hpp"
 
 #ifdef MQ_WITH_TLS
 
@@ -184,8 +187,9 @@ struct mqtt_listener_cfg_t {
     mqtt_ssl_cfg_t ssl_cfg;
 };
 
-struct mqtt_metrics_cfg_t {
+struct mqtt_exposer_cfg_t {
     bool enable;
     std::string address;
     uint16_t port;
+    uint32_t thread_count;
 };

@@ -1,1 +1,0 @@
-../../pull/tests/integration/sample_server.cc

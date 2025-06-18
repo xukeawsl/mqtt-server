@@ -13,6 +13,7 @@ foreach(file ${test_sources})
         ${PROJECT_SOURCE_DIR}/../third-party/asio/include
     )
 
+    find_package(GTest REQUIRED)
     target_link_libraries(${test_name}_Tests PUBLIC gtest gtest_main pthread mosquitto)
 
     add_test(

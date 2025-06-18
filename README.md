@@ -64,7 +64,7 @@ cmake -DLOG_LEVEL=Error ..
 ### 4. 运行测试(以 Ubuntu 为例)
 ```bash
 # 安装依赖
-apt install libmosquitto-dev
+apt install libmosquitto-dev libgtest-dev
 
 # 开启选项编译后运行服务
 cmake -DENABLE_UNIT_TESTING=On .. && cmake --build . && ./mqtt-server
