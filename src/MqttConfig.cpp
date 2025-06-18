@@ -18,6 +18,7 @@ MqttConfig::MqttConfig()
       pub_rate_limit_(0, 0),
       name_("logs/mqtt-server.log"),
       max_rotate_size_(1024 * 1024),
+      max_rotate_count_(10),
       thread_pool_qsize_(8192),
       thread_count_(1),
       enable_(false),

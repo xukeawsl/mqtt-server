@@ -20,9 +20,9 @@ public:
 
     void stop();
 
-    void inc_mqtt_active_connections(std::string protocol);
+    void inc_mqtt_active_connections(MQTT_PROTOCOL protocol);
 
-    void dec_mqtt_active_connections(std::string protocol);
+    void dec_mqtt_active_connections(MQTT_PROTOCOL protocol);
 
 private:
     void init_mqtt_active_connections_metric();

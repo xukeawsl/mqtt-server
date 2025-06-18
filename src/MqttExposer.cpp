@@ -88,24 +88,70 @@ void MqttExposer::init_mqtt_active_connections_metric() {
     mqtt_active_connections_metric->inc({"wss"}, 0);
 }
 
-void MqttExposer::inc_mqtt_active_connections(std::string protocol) {
+void MqttExposer::inc_mqtt_active_connections(MQTT_PROTOCOL protocol) {
     static auto mqtt_active_connections_metric =
         mqtt_dynamic_metric_manager::instance()
             .get_metric_dynamic<ylt::metric::dynamic_gauge_1t>(
                 "mqtt_active_connections");
 
-    if (mqtt_active_connections_metric) {
-        mqtt_active_connections_metric->inc({std::move(protocol)});
+    if (!mqtt_active_connections_metric) {
+        return;
     }
+
+    std::string protocol_str = "unknown";
+
+    switch (protocol) {
+        case MQTT_PROTOCOL::MQTT:
+            protocol_str = "mqtt";
+            break;
+        case MQTT_PROTOCOL::MQTTS:
+            protocol_str = "mqtts";
+            break;
+        case MQTT_PROTOCOL::WS:
+            protocol_str = "ws";
+            break;
+        case MQTT_PROTOCOL::WSS:
+            protocol_str = "wss";
+            break;
+        default:
+            SPDLOG_WARN("Unknown MQTT protocol");
+            protocol_str = "unknown";
+            break;
+    }
+
+    mqtt_active_connections_metric->inc({std::move(protocol_str)});
 }
 
-void MqttExposer::dec_mqtt_active_connections(std::string protocol) {
+void MqttExposer::dec_mqtt_active_connections(MQTT_PROTOCOL protocol) {
     static auto mqtt_active_connections_metric =
         mqtt_dynamic_metric_manager::instance()
             .get_metric_dynamic<ylt::metric::dynamic_gauge_1t>(
                 "mqtt_active_connections");
 
-    if (mqtt_active_connections_metric) {
-        mqtt_active_connections_metric->dec({std::move(protocol)});
+    if (!mqtt_active_connections_metric) {
+        return;
     }
+
+    std::string protocol_str = "unknown";
+
+    switch (protocol) {
+        case MQTT_PROTOCOL::MQTT:
+            protocol_str = "mqtt";
+            break;
+        case MQTT_PROTOCOL::MQTTS:
+            protocol_str = "mqtts";
+            break;
+        case MQTT_PROTOCOL::WS:
+            protocol_str = "ws";
+            break;
+        case MQTT_PROTOCOL::WSS:
+            protocol_str = "wss";
+            break;
+        default:
+            SPDLOG_WARN("Unknown MQTT protocol");
+            protocol_str = "unknown";
+            break;
+    }
+
+    mqtt_active_connections_metric->dec({std::move(protocol_str)});
 }

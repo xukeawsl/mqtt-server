@@ -55,9 +55,11 @@ void MqttSession<SocketType>::start() {
     if constexpr (std::is_same_v<SocketType,
                                  asio::ssl::stream<asio::ip::tcp::socket>>) {
         if (this->is_websocket) {
-            MqttExposer::getInstance()->inc_mqtt_active_connections("wss");
+            MqttExposer::getInstance()->inc_mqtt_active_connections(
+                MQTT_PROTOCOL::WSS);
         } else {
-            MqttExposer::getInstance()->inc_mqtt_active_connections("mqtts");
+            MqttExposer::getInstance()->inc_mqtt_active_connections(
+                MQTT_PROTOCOL::MQTTS);
         }
 
         asio::co_spawn(
@@ -68,18 +70,22 @@ void MqttSession<SocketType>::start() {
             asio::detached);
     } else {
         if (this->is_websocket) {
-            MqttExposer::getInstance()->inc_mqtt_active_connections("ws");
+            MqttExposer::getInstance()->inc_mqtt_active_connections(
+                MQTT_PROTOCOL::WS);
         } else {
-            MqttExposer::getInstance()->inc_mqtt_active_connections("mqtt");
+            MqttExposer::getInstance()->inc_mqtt_active_connections(
+                MQTT_PROTOCOL::MQTT);
         }
 
         handle_session();
     }
 #else
     if (this->is_websocket) {
-        MqttExposer::getInstance()->inc_mqtt_active_connections("ws");
+        MqttExposer::getInstance()->inc_mqtt_active_connections(
+            MQTT_PROTOCOL::WS);
     } else {
-        MqttExposer::getInstance()->inc_mqtt_active_connections("mqtt");
+        MqttExposer::getInstance()->inc_mqtt_active_connections(
+            MQTT_PROTOCOL::MQTT);
     }
 
     handle_session();
@@ -136,26 +142,32 @@ void MqttSession<SocketType>::disconnect() {
         this->socket.next_layer().close(ignored_ec);
 
         if (this->is_websocket) {
-            MqttExposer::getInstance()->dec_mqtt_active_connections("wss");
+            MqttExposer::getInstance()->dec_mqtt_active_connections(
+                MQTT_PROTOCOL::WSS);
         } else {
-            MqttExposer::getInstance()->dec_mqtt_active_connections("mqtts");
+            MqttExposer::getInstance()->dec_mqtt_active_connections(
+                MQTT_PROTOCOL::MQTTS);
         }
     } else {
         this->socket.close(ignored_ec);
 
         if (this->is_websocket) {
-            MqttExposer::getInstance()->dec_mqtt_active_connections("ws");
+            MqttExposer::getInstance()->dec_mqtt_active_connections(
+                MQTT_PROTOCOL::WS);
         } else {
-            MqttExposer::getInstance()->dec_mqtt_active_connections("mqtt");
+            MqttExposer::getInstance()->dec_mqtt_active_connections(
+                MQTT_PROTOCOL::MQTT);
         }
     }
 #else
     this->socket.close(ignored_ec);
 
     if (this->is_websocket) {
-        MqttExposer::getInstance()->dec_mqtt_active_connections("ws");
+        MqttExposer::getInstance()->dec_mqtt_active_connections(
+            MQTT_PROTOCOL::WS);
     } else {
-        MqttExposer::getInstance()->dec_mqtt_active_connections("mqtt");
+        MqttExposer::getInstance()->dec_mqtt_active_connections(
+            MQTT_PROTOCOL::MQTT);
     }
 #endif
     this->cond_timer.cancel(ignored_ec);

@@ -32,6 +32,7 @@ mqtt-server 是一个使用 C++20 协程开发的支持 MQTT `v3.1.1` 协议的�
 ## 使用
 
 ### 1. 克隆源代码
+
 ```bash
 git clone https://github.com/xukeawsl/mqtt-server.git
 cd mqtt-server
@@ -53,6 +54,7 @@ cmake -DLOG_LEVEL=Error ..
 ```
 
 ### 3. 运行 mqtt-server
+
 ```bash
 # Linux
 ./mqtt-server
@@ -62,6 +64,7 @@ cmake -DLOG_LEVEL=Error ..
 ```
 
 ### 4. 运行测试(以 Ubuntu 为例)
+
 ```bash
 # 安装依赖
 apt install libmosquitto-dev libgtest-dev
