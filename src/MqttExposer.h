@@ -43,4 +43,15 @@ private:
     bool is_running_;
     std::unique_ptr<coro_http::coro_http_server> http_server_;
     std::unique_ptr<async_simple::Future<std::error_code>> future_;
+
+    // dynamic metrics
+    std::shared_ptr<ylt::metric::dynamic_gauge_1t> mqtt_active_connections_metric_;
+    std::shared_ptr<ylt::metric::dynamic_counter_1t> mqtt_pub_topic_count_metric_;
+    std::shared_ptr<ylt::metric::dynamic_counter_1t> mqtt_sub_topic_count_metric_;
+    std::shared_ptr<ylt::metric::dynamic_counter_1t> mqtt_unsub_topic_count_metric_;
+
+    // static metrics
+    std::shared_ptr<ylt::metric::counter_t> mqtt_pub_topic_total_count_metric_;
+    std::shared_ptr<ylt::metric::counter_t> mqtt_sub_topic_total_count_metric_;
+    std::shared_ptr<ylt::metric::counter_t> mqtt_unsub_topic_total_count_metric_;
 };
