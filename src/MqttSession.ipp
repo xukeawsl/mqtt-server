@@ -1768,7 +1768,7 @@ asio::awaitable<MQTT_RC_CODE> MqttSession<SocketType>::handle_connect() {
     this->complete_connect = true;
 
     // 添加自动订阅项
-    add_subscribe(MqttConfig::getInstance()->auto_subscribe_list());
+    this->add_subscribe(MqttConfig::getInstance()->auto_subscribe_list());
 
     // 开启协程用于处理需要当前会话转发的主题
     asio::co_spawn(
@@ -1802,7 +1802,7 @@ asio::awaitable<MQTT_RC_CODE> MqttSession<SocketType>::handle_publish() {
         (this->command >> 1) & 0x03;    // 第 2 位 Qos-H, 第 1 位 Qos-S
     uint8_t dup = (this->command >> 3) & 1;    // 第 3 位 dup
     std::string pub_topic;
-    uint16_t packet_id;
+    uint16_t packet_id = 0;
     uint32_t pub_payloadlen;
     std::string pub_payload;
 
@@ -1866,12 +1866,34 @@ asio::awaitable<MQTT_RC_CODE> MqttSession<SocketType>::handle_publish() {
         }
     }
 
+    // ACL 检查
+    if (MqttConfig::getInstance()->acl_enable()) {
+        mqtt_acl_rule_t rule;
+        rule.type = MQTT_ACL_TYPE::USERNAME;
+        rule.object = this->username;
+        rule.action = MQTT_ACL_ACTION::PUB;
+        rule.topics = std::make_unique<std::unordered_set<std::string>>();
+
+        rule.topics->emplace(pub_topic);
+
+        // 检查不通过则不再对此消息处理
+        if (!MqttConfig::getInstance()->acl_check(rule)) {
+            co_return MQTT_RC_CODE::ERR_SUCCESS;
+        }
+    }
+
     // 报文读取完毕, 对于 qos1 和 qos2 级别需要发送响应报文
-    if (qos == 1) {
+    if (qos == 0) {
+        MqttExposer::getInstance()->inc_mqtt_pub_topic_count_metric(
+            MQTT_QUALITY::Qos0);
+    } else if (qos == 1) {
         rc = co_await send_puback(packet_id);
         if (rc != MQTT_RC_CODE::ERR_SUCCESS) {
             co_return rc;
         }
+
+        MqttExposer::getInstance()->inc_mqtt_pub_topic_count_metric(
+            MQTT_QUALITY::Qos1);
     } else if (qos == 2) {
         rc = co_await send_pubrec(packet_id);
         if (rc != MQTT_RC_CODE::ERR_SUCCESS) {
@@ -1893,22 +1915,9 @@ asio::awaitable<MQTT_RC_CODE> MqttSession<SocketType>::handle_publish() {
             std::chrono::seconds(MqttConfig::getInstance()->max_waiting_time());
 
         this->session_state.waiting_map[packet_id] = std::move(packet);
-    }
 
-    // ACL 检查
-    if (MqttConfig::getInstance()->acl_enable()) {
-        mqtt_acl_rule_t rule;
-        rule.type = MQTT_ACL_TYPE::USERNAME;
-        rule.object = this->username;
-        rule.action = MQTT_ACL_ACTION::PUB;
-        rule.topics = std::make_unique<std::unordered_set<std::string>>();
-
-        rule.topics->emplace(pub_topic);
-
-        // 检查不通过则不再对此消息处理
-        if (!MqttConfig::getInstance()->acl_check(rule)) {
-            co_return MQTT_RC_CODE::ERR_SUCCESS;
-        }
+        MqttExposer::getInstance()->inc_mqtt_pub_topic_count_metric(
+            MQTT_QUALITY::Qos2);
     }
 
     // 组包
@@ -2214,7 +2223,7 @@ template <typename SocketType>
 asio::awaitable<MQTT_RC_CODE> MqttSession<SocketType>::handle_unsubscribe() {
     MQTT_RC_CODE rc = MQTT_RC_CODE::ERR_SUCCESS_DISCONNECT;
 
-    uint16_t packet_id;
+    uint16_t packet_id = 0;
     std::string tmp_topic;
     std::list<std::string> unsub_topic_list;
 
@@ -2240,7 +2249,24 @@ asio::awaitable<MQTT_RC_CODE> MqttSession<SocketType>::handle_unsubscribe() {
 
     // 删除对应主题订阅信息
     for (auto& name : unsub_topic_list) {
-        this->session_state.sub_topic_map.erase(name);
+        auto it = this->session_state.sub_topic_map.find(name);
+        if (it == this->session_state.sub_topic_map.end()) {
+            continue;
+        }
+        
+        auto qos = it->second;
+        if (qos == 0) {
+            MqttExposer::getInstance()->inc_mqtt_unsub_topic_count_metric(
+                MQTT_QUALITY::Qos0);
+        } else if (qos == 1) {
+            MqttExposer::getInstance()->inc_mqtt_unsub_topic_count_metric(
+                MQTT_QUALITY::Qos1);
+        } else if (qos == 2) {
+            MqttExposer::getInstance()->inc_mqtt_unsub_topic_count_metric(
+                MQTT_QUALITY::Qos2);
+        }
+
+        this->session_state.sub_topic_map.erase(it);
     }
 
     if (this->session_state.sub_topic_map.empty()) {
@@ -2698,6 +2724,17 @@ void MqttSession<SocketType>::add_subscribe(
 
         // 获取保留消息, 只针对当前新增的主题
         this->broker.get_retain(this->shared_from_this(), name);
+
+        if (qos == 0) {
+            MqttExposer::getInstance()->inc_mqtt_sub_topic_count_metric(
+                MQTT_QUALITY::Qos0);
+        } else if (qos == 1) {
+            MqttExposer::getInstance()->inc_mqtt_sub_topic_count_metric(
+                MQTT_QUALITY::Qos1);
+        } else if (qos == 2) {
+            MqttExposer::getInstance()->inc_mqtt_sub_topic_count_metric(
+                MQTT_QUALITY::Qos2);
+        }
     }
 }
 

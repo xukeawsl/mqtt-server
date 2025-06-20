@@ -34,6 +34,12 @@ enum class MQTT_PROTOCOL: uint8_t {
     WSS,
 };
 
+enum class MQTT_QUALITY : uint8_t {
+    Qos0,
+    Qos1,
+    Qos2,
+};
+
 enum class MQTT_MSG_STATE: uint8_t {
     INVALID = 0,
     WAIT_RESEND_PUBLISH_QOS1,

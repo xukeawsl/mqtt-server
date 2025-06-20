@@ -24,8 +24,20 @@ public:
 
     void dec_mqtt_active_connections(MQTT_PROTOCOL protocol);
 
+    void inc_mqtt_pub_topic_count_metric(MQTT_QUALITY qos);
+
+    void inc_mqtt_sub_topic_count_metric(MQTT_QUALITY qos);
+
+    void inc_mqtt_unsub_topic_count_metric(MQTT_QUALITY qos);
+
 private:
     void init_mqtt_active_connections_metric();
+
+    void init_mqtt_pub_topic_count_metric();
+
+    void init_mqtt_sub_topic_count_metric();
+
+    void init_mqtt_unsub_topic_count_metric();
 
 private:
     bool is_running_;
