@@ -1755,14 +1755,14 @@ asio::awaitable<MQTT_RC_CODE> MqttSession<SocketType>::handle_connect() {
     this->session_state.keep_alive = keep_alive;
     this->session_state.will_topic = will_topic;
 
-    // 加入 broker
-    session_present = this->broker.join_or_update(this->shared_from_this());
-
     // 发送 CONNACK 响应
     rc = co_await send_connack(session_present, MQTT_CONNACK::ACCEPTED);
     if (rc != MQTT_RC_CODE::ERR_SUCCESS) {
         co_return MQTT_RC_CODE::ERR_NO_CONN;
     }
+
+    // 加入 broker
+    session_present = this->broker.join_or_update(this->shared_from_this());
 
     // CONNECT 完成标志设置
     this->complete_connect = true;
@@ -2339,7 +2339,6 @@ asio::awaitable<void> MqttSession<SocketType>::handle_inflighting_packets() {
             }
 
             send_packet_list.clear();
-
         } else {
             co_await this->cond_timer.async_wait(
                 asio::redirect_error(asio::use_awaitable, ec));
@@ -2371,7 +2370,7 @@ asio::awaitable<void> MqttSession<SocketType>::handle_waiting_map_packets() {
 
         for (auto iter = this->session_state.waiting_map.begin();
              iter != this->session_state.waiting_map.end();) {
-            // 使用引用, 方便直接修改表中的内容
+            // 使用引用, 方便直接修改包中的内容
             mqtt_packet_t& packet = iter->second;
 
             if (packet.expiry_time > deadline) {
