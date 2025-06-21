@@ -157,9 +157,9 @@ void MqttExposer::init_mqtt_pub_topic_count_metric() {
         mqtt_dynamic_metric_manager::instance()
             .get_metric_dynamic<ylt::metric::dynamic_counter_1t>(
                 s_mqtt_pub_topic_count);
-        mqtt_dynamic_metric_manager::instance()
-            .get_metric_dynamic<ylt::metric::dynamic_counter_1t>(
-                s_mqtt_pub_topic_count);
+    mqtt_dynamic_metric_manager::instance()
+        .get_metric_dynamic<ylt::metric::dynamic_counter_1t>(
+            s_mqtt_pub_topic_count);
 
     mqtt_pub_topic_count_metric_->inc({"Qos0"}, 0);
     mqtt_pub_topic_count_metric_->inc({"Qos1"}, 0);
@@ -170,8 +170,10 @@ void MqttExposer::init_mqtt_pub_topic_count_metric() {
             s_mqtt_pub_topic_total_count,
             "Total number of publish MQTT topics");
 
-    mqtt_pub_topic_total_count_metric_ = mqtt_static_metric_manager::instance()
-        .get_metric_static<ylt::metric::counter_t>(s_mqtt_pub_topic_total_count);
+    mqtt_pub_topic_total_count_metric_ =
+        mqtt_static_metric_manager::instance()
+            .get_metric_static<ylt::metric::counter_t>(
+                s_mqtt_pub_topic_total_count);
 
     mqtt_pub_topic_total_count_metric_->inc(0);
 }
@@ -196,8 +198,10 @@ void MqttExposer::init_mqtt_sub_topic_count_metric() {
             s_mqtt_sub_topic_total_count,
             "Total number of subscribe MQTT topics");
 
-    mqtt_sub_topic_total_count_metric_ = mqtt_static_metric_manager::instance()
-        .get_metric_static<ylt::metric::counter_t>(s_mqtt_sub_topic_total_count);
+    mqtt_sub_topic_total_count_metric_ =
+        mqtt_static_metric_manager::instance()
+            .get_metric_static<ylt::metric::counter_t>(
+                s_mqtt_sub_topic_total_count);
 
     mqtt_sub_topic_total_count_metric_->inc(0);
 }
@@ -222,9 +226,11 @@ void MqttExposer::init_mqtt_unsub_topic_count_metric() {
             s_mqtt_unsub_topic_total_count,
             "Total number of unsubscribe MQTT topics");
 
-    mqtt_unsub_topic_total_count_metric_ = mqtt_static_metric_manager::instance()
-        .get_metric_static<ylt::metric::counter_t>(s_mqtt_unsub_topic_total_count);
-    
+    mqtt_unsub_topic_total_count_metric_ =
+        mqtt_static_metric_manager::instance()
+            .get_metric_static<ylt::metric::counter_t>(
+                s_mqtt_unsub_topic_total_count);
+
     mqtt_unsub_topic_total_count_metric_->inc(0);
 }
 
@@ -263,7 +269,8 @@ void MqttExposer::inc_mqtt_sub_topic_count_metric(MQTT_QUALITY qos) {
 }
 
 void MqttExposer::inc_mqtt_unsub_topic_count_metric(MQTT_QUALITY qos) {
-    if (!mqtt_unsub_topic_count_metric_ || !mqtt_unsub_topic_total_count_metric_) {
+    if (!mqtt_unsub_topic_count_metric_ ||
+        !mqtt_unsub_topic_total_count_metric_) {
         return;
     }
 

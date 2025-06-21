@@ -2253,7 +2253,7 @@ asio::awaitable<MQTT_RC_CODE> MqttSession<SocketType>::handle_unsubscribe() {
         if (it == this->session_state.sub_topic_map.end()) {
             continue;
         }
-        
+
         auto qos = it->second;
         if (qos == 0) {
             MqttExposer::getInstance()->inc_mqtt_unsub_topic_count_metric(
