@@ -27,7 +27,7 @@ mqtt-server 是一个使用 C++20 协程开发的支持 MQTT `v3.1.1` 协议的�
 
 * 支持 WebSocket 协议
 
-* 支持使用 Prometheus 采集监控指标, Grafana 的 DashBoard 配置见 `grafana/dashboard.json`
+* 支持使用 Prometheus 采集监控指标, Grafana 面板默认配置见 `grafana/dashboard.json`
 
 ## 使用
 
