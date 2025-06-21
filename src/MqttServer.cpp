@@ -89,7 +89,7 @@ asio::awaitable<void> MqttServer::handle_accept(
                 mode |= asio::ssl::verify_fail_if_no_peer_cert;
             }
 
-            //双向认证必须提供 CA 证书
+            // 双向认证必须提供 CA 证书
             ssl_context.load_verify_file(cfg.ssl_cfg.cacertfile);
         }
 

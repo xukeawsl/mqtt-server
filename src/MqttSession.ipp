@@ -1885,7 +1885,7 @@ asio::awaitable<MQTT_RC_CODE> MqttSession<SocketType>::handle_publish() {
     // 报文读取完毕, 对于 qos1 和 qos2 级别需要发送响应报文
     if (qos == 0) {
         MqttExposer::getInstance()->inc_mqtt_pub_topic_count_metric(
-            MQTT_QUALITY::Qos0);
+            this->client_id, MQTT_QUALITY::Qos0);
     } else if (qos == 1) {
         rc = co_await send_puback(packet_id);
         if (rc != MQTT_RC_CODE::ERR_SUCCESS) {
@@ -1893,7 +1893,7 @@ asio::awaitable<MQTT_RC_CODE> MqttSession<SocketType>::handle_publish() {
         }
 
         MqttExposer::getInstance()->inc_mqtt_pub_topic_count_metric(
-            MQTT_QUALITY::Qos1);
+            this->client_id, MQTT_QUALITY::Qos1);
     } else if (qos == 2) {
         rc = co_await send_pubrec(packet_id);
         if (rc != MQTT_RC_CODE::ERR_SUCCESS) {
@@ -1917,7 +1917,7 @@ asio::awaitable<MQTT_RC_CODE> MqttSession<SocketType>::handle_publish() {
         this->session_state.waiting_map[packet_id] = std::move(packet);
 
         MqttExposer::getInstance()->inc_mqtt_pub_topic_count_metric(
-            MQTT_QUALITY::Qos2);
+            this->client_id, MQTT_QUALITY::Qos2);
     }
 
     // 组包
@@ -2257,13 +2257,13 @@ asio::awaitable<MQTT_RC_CODE> MqttSession<SocketType>::handle_unsubscribe() {
         auto qos = it->second;
         if (qos == 0) {
             MqttExposer::getInstance()->inc_mqtt_unsub_topic_count_metric(
-                MQTT_QUALITY::Qos0);
+                this->client_id, MQTT_QUALITY::Qos0);
         } else if (qos == 1) {
             MqttExposer::getInstance()->inc_mqtt_unsub_topic_count_metric(
-                MQTT_QUALITY::Qos1);
+                this->client_id, MQTT_QUALITY::Qos1);
         } else if (qos == 2) {
             MqttExposer::getInstance()->inc_mqtt_unsub_topic_count_metric(
-                MQTT_QUALITY::Qos2);
+                this->client_id, MQTT_QUALITY::Qos2);
         }
 
         this->session_state.sub_topic_map.erase(it);
@@ -2726,13 +2726,13 @@ void MqttSession<SocketType>::add_subscribe(
 
         if (qos == 0) {
             MqttExposer::getInstance()->inc_mqtt_sub_topic_count_metric(
-                MQTT_QUALITY::Qos0);
+                this->client_id, MQTT_QUALITY::Qos0);
         } else if (qos == 1) {
             MqttExposer::getInstance()->inc_mqtt_sub_topic_count_metric(
-                MQTT_QUALITY::Qos1);
+                this->client_id, MQTT_QUALITY::Qos1);
         } else if (qos == 2) {
             MqttExposer::getInstance()->inc_mqtt_sub_topic_count_metric(
-                MQTT_QUALITY::Qos2);
+                this->client_id, MQTT_QUALITY::Qos2);
         }
     }
 }
