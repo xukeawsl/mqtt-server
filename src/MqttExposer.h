@@ -49,9 +49,4 @@ private:
     std::shared_ptr<ylt::metric::dynamic_counter_1t> mqtt_pub_topic_count_metric_;
     std::shared_ptr<ylt::metric::dynamic_counter_1t> mqtt_sub_topic_count_metric_;
     std::shared_ptr<ylt::metric::dynamic_counter_1t> mqtt_unsub_topic_count_metric_;
-
-    // static metrics
-    std::shared_ptr<ylt::metric::counter_t> mqtt_pub_topic_total_count_metric_;
-    std::shared_ptr<ylt::metric::counter_t> mqtt_sub_topic_total_count_metric_;
-    std::shared_ptr<ylt::metric::counter_t> mqtt_unsub_topic_total_count_metric_;
 };
