@@ -84,6 +84,7 @@ struct MQTT_CMD {
     static constexpr uint8_t PUBCOMP = 0x70U;
     static constexpr uint8_t SUBSCRIBE = 0x80U;
     static constexpr uint8_t SUBACK = 0x90U;
+    static constexpr uint8_t PUBLIMIT = 0x93U;
     static constexpr uint8_t UNSUBSCRIBE = 0xA0U;
     static constexpr uint8_t UNSUBACK = 0xB0U;
     static constexpr uint8_t PINGREQ = 0xC0U;
@@ -198,4 +199,15 @@ struct mqtt_exposer_cfg_t {
     std::string address;
     uint16_t port;
     uint32_t thread_count;
+};
+
+struct mqtt_limit_selector_cfg_t {
+    std::vector<std::string> client_id;
+    std::vector<std::string> client_id_prefix;
+    std::vector<std::string> client_id_regex;
+};
+
+struct mqtt_limit_group_cfg_t {
+    std::string name;
+    std::unique_ptr<mqtt_limit_selector_cfg_t> selector;
 };

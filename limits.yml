@@ -1,0 +1,30 @@
+# 配置说明: 限制组的 name 必须全局唯一, 对于一个连接的 client_id
+# 它属于从上到下匹配到的第一个限制组, 对于 default 限制组比较特殊
+# 它被定为默认的限制组，如果一个 client_id 没有匹配的限制组，它就
+# 属于默认组，因此剩余的所有 client_id 都属于默认组
+limit_groups:
+  - name: 'default'
+    limit:
+      pub_rate: 10000
+      sub_rate: 1000
+
+  - name: 'emqx-test'
+    selector:
+      client_id_prefix: ['mqttx_']
+    limit:
+      pub_rate: 1
+      sub_rate: 50000
+  
+  - name: 'iot-devices'
+    selector:
+      client_id_regex: ['.*lot-device.*']
+    limit:
+      pub_rate: 2000
+      sub_rate: 600
+
+  - name: 'auto-gen'
+    selector:
+      client_id: ['MS_1', 'MS_2']
+    limit:
+      pub_rate: 100
+      sub_rate: 50

@@ -11,8 +11,6 @@ struct MqttSessionState {
     std::unordered_map<std::string, uint8_t> sub_topic_map;
     std::unordered_map<uint16_t, mqtt_packet_t> waiting_map;
     std::queue<mqtt_packet_t> inflight_queue;
-    std::unique_ptr<MqttTokenBucket> sub_limiter;
-    std::unique_ptr<MqttTokenBucket> pub_limiter;
 
     MqttSessionState() :
         clean_session(true),

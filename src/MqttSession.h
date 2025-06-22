@@ -6,6 +6,7 @@
 #include "MqttUtils.h"
 #include "MqttWebSocket.h"
 #include "MqttExposer.h"
+#include "MqttLimits.h"
 
 template <typename SocketType>
 class MqttSession: public std::enable_shared_from_this<MqttSession<SocketType>> {
@@ -117,6 +118,8 @@ private:
     asio::awaitable<MQTT_RC_CODE> send_pubrel(uint16_t packet_id);
 
     asio::awaitable<MQTT_RC_CODE> send_pubcomp(uint16_t packet_id);
+
+    asio::awaitable<MQTT_RC_CODE> send_publimit(uint16_t packet_id);
 
     asio::awaitable<MQTT_RC_CODE> send_pingresp();
 

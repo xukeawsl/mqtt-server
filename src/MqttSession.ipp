@@ -31,19 +31,6 @@ MqttSession<SocketType>::MqttSession(
     this->keep_alive_timer.expires_at(
         std::chrono::steady_clock::time_point::max());
     this->check_timer.expires_at(std::chrono::steady_clock::time_point::max());
-
-    auto [sub_rate, sub_brust] = MqttConfig::getInstance()->sub_rate_limit();
-    auto [pub_rate, pub_brust] = MqttConfig::getInstance()->pub_rate_limit();
-
-    if (sub_rate > 0) {
-        this->session_state.sub_limiter =
-            std::make_unique<MqttTokenBucket>(sub_rate, sub_brust);
-    }
-
-    if (pub_rate > 0) {
-        this->session_state.pub_limiter =
-            std::make_unique<MqttTokenBucket>(pub_rate, pub_brust);
-    }
 }
 
 template <typename SocketType>
@@ -354,10 +341,6 @@ void MqttSession<SocketType>::move_session_state(
             std::move(this->session_state.sub_topic_map);
         new_session->session_state.waiting_map =
             std::move(this->session_state.waiting_map);
-        new_session->session_state.sub_limiter =
-            std::move(this->session_state.sub_limiter);
-        new_session->session_state.pub_limiter =
-            std::move(this->session_state.pub_limiter);
     }
 }
 
@@ -1127,6 +1110,43 @@ asio::awaitable<MQTT_RC_CODE> MqttSession<SocketType>::send_pubcomp(
 }
 
 template <typename SocketType>
+asio::awaitable<MQTT_RC_CODE> MqttSession<SocketType>::send_publimit(
+    uint16_t packet_id) {
+    asio::error_code ec;
+    MQTT_RC_CODE rc;
+    std::string packet;
+    uint16_t net_packet_id;
+
+    rc = add_mqtt_fixed_header(packet, MQTT_CMD::PUBLIMIT, 2);
+    if (rc != MQTT_RC_CODE::ERR_SUCCESS) {
+        co_return rc;
+    }
+
+    net_packet_id = asio::detail::socket_ops::host_to_network_short(packet_id);
+
+    std::array<asio::const_buffer, 2> buf = {
+        {asio::buffer(packet.data(), packet.length()),
+         asio::buffer(&net_packet_id, sizeof(uint16_t))}};
+
+    if (this->is_websocket) {
+        rc = co_await this->write_websocket(buf);
+        if (rc != MQTT_RC_CODE::ERR_SUCCESS) {
+            co_return rc;
+        }
+    } else {
+        co_await async_write(this->socket, buf,
+                             asio::redirect_error(asio::use_awaitable, ec));
+        if (ec) {
+            co_return MQTT_RC_CODE::ERR_NO_CONN;
+        }
+    }
+
+    SPDLOG_DEBUG("PUBLIMIT: send packet_id = [X'{:04X}']", packet_id);
+
+    co_return rc;
+}
+
+template <typename SocketType>
 asio::awaitable<MQTT_RC_CODE> MqttSession<SocketType>::send_pingresp() {
     asio::error_code ec;
     MQTT_RC_CODE rc;
@@ -1806,24 +1826,6 @@ asio::awaitable<MQTT_RC_CODE> MqttSession<SocketType>::handle_publish() {
     uint32_t pub_payloadlen;
     std::string pub_payload;
 
-    // 发布限流检查, 如果速率超过设置的值则需要延迟处理
-    if (this->session_state.pub_limiter &&
-        !this->session_state.pub_limiter->tryConsume()) {
-        asio::error_code ec;
-        asio::steady_timer retry_timer(this->keep_alive_timer.get_executor());
-
-        while (!this->session_state.pub_limiter->tryConsume()) {
-            retry_timer.expires_after(std::chrono::seconds(1));
-
-            co_await retry_timer.async_wait(
-                asio::redirect_error(asio::use_awaitable, ec));
-
-            if (ec) {
-                break;
-            }
-        }
-    }
-
     if (qos == 3 || (qos == 1 && dup == 1)) {
         co_return MQTT_RC_CODE::ERR_MALFORMED_PACKET;
     }
@@ -1884,9 +1886,18 @@ asio::awaitable<MQTT_RC_CODE> MqttSession<SocketType>::handle_publish() {
 
     // 报文读取完毕, 对于 qos1 和 qos2 级别需要发送响应报文
     if (qos == 0) {
+        if (MqttLimits::getInstance()->check_pub_limit(this->client_id)) {
+            co_return rc;
+        }
+
         MqttExposer::getInstance()->inc_mqtt_pub_topic_count_metric(
             this->client_id, MQTT_QUALITY::Qos0);
     } else if (qos == 1) {
+        if (MqttLimits::getInstance()->check_pub_limit(this->client_id)) {
+            rc = co_await send_publimit(packet_id);
+            co_return rc;
+        }
+
         rc = co_await send_puback(packet_id);
         if (rc != MQTT_RC_CODE::ERR_SUCCESS) {
             co_return rc;
@@ -1895,6 +1906,11 @@ asio::awaitable<MQTT_RC_CODE> MqttSession<SocketType>::handle_publish() {
         MqttExposer::getInstance()->inc_mqtt_pub_topic_count_metric(
             this->client_id, MQTT_QUALITY::Qos1);
     } else if (qos == 2) {
+        if (MqttLimits::getInstance()->check_pub_limit(this->client_id)) {
+            rc = co_await send_publimit(packet_id);
+            co_return rc;
+        }
+
         rc = co_await send_pubrec(packet_id);
         if (rc != MQTT_RC_CODE::ERR_SUCCESS) {
             co_return rc;
@@ -2116,24 +2132,6 @@ asio::awaitable<MQTT_RC_CODE> MqttSession<SocketType>::handle_subscribe() {
     uint32_t new_subscriptions = 0;
     uint32_t max_subscriptions = MqttConfig::getInstance()->max_subscriptions();
 
-    // 订阅限流检查, 如果速率超过设置的值则需要延迟处理
-    if (this->session_state.sub_limiter &&
-        !this->session_state.sub_limiter->tryConsume()) {
-        asio::error_code ec;
-        asio::steady_timer retry_timer(this->keep_alive_timer.get_executor());
-
-        while (!this->session_state.sub_limiter->tryConsume()) {
-            retry_timer.expires_after(std::chrono::seconds(1));
-
-            co_await retry_timer.async_wait(
-                asio::redirect_error(asio::use_awaitable, ec));
-
-            if (ec) {
-                break;
-            }
-        }
-    }
-
     rc = co_await read_uint16(&packet_id, true);
     if (rc != MQTT_RC_CODE::ERR_SUCCESS) {
         co_return rc;
@@ -2185,10 +2183,7 @@ asio::awaitable<MQTT_RC_CODE> MqttSession<SocketType>::handle_subscribe() {
                 if (curr_subscriptions + new_subscriptions >
                     max_subscriptions) {
                     tmp_qos = 0x80;
-                } else {
-                    sub_topic_list.emplace_back(std::move(tmp_topic), tmp_qos);
                 }
-
             } else {
                 tmp_qos = 0x80;    // 表示失败
             }
@@ -2200,9 +2195,15 @@ asio::awaitable<MQTT_RC_CODE> MqttSession<SocketType>::handle_subscribe() {
 
             if (curr_subscriptions + new_subscriptions > max_subscriptions) {
                 tmp_qos = 0x80;
-            } else {
-                sub_topic_list.emplace_back(std::move(tmp_topic), tmp_qos);
             }
+        }
+
+        if (MqttLimits::getInstance()->check_sub_limit(this->client_id)) {
+            tmp_qos = 0x80;
+        }
+
+        if (tmp_qos != 0x80) {
+            sub_topic_list.emplace_back(std::move(tmp_topic), tmp_qos);
         }
 
         suback_payload.push_back(tmp_qos);

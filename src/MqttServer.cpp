@@ -14,8 +14,7 @@ void MqttServer::run() noexcept {
 
         io_context.run();
     } catch (const std::exception& e) {
-        SPDLOG_ERROR("Mqtt Server failed to start : ERR_MSG = [{}])",
-                     std::string(e.what()));
+        SPDLOG_ERROR("Mqtt Server failed to start : ERR_MSG = [{}])", e.what());
     }
 }
 

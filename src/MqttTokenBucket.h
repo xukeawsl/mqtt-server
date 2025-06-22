@@ -5,6 +5,8 @@
 
 class MqttTokenBucket {
 public:
+    MqttTokenBucket(double tokensPerSecond);
+
     MqttTokenBucket(double tokensPerSecond, double maxTokens);
     
     ~MqttTokenBucket() = default;
