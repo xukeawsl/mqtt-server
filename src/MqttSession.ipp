@@ -1775,17 +1775,17 @@ asio::awaitable<MQTT_RC_CODE> MqttSession<SocketType>::handle_connect() {
     this->session_state.keep_alive = keep_alive;
     this->session_state.will_topic = will_topic;
 
-    // 发送 CONNACK 响应
-    rc = co_await send_connack(session_present, MQTT_CONNACK::ACCEPTED);
-    if (rc != MQTT_RC_CODE::ERR_SUCCESS) {
-        co_return MQTT_RC_CODE::ERR_NO_CONN;
-    }
-
     // 加入 broker
     session_present = this->broker.join_or_update(this->shared_from_this());
 
     // CONNECT 完成标志设置
     this->complete_connect = true;
+
+    // 发送 CONNACK 响应
+    rc = co_await send_connack(session_present, MQTT_CONNACK::ACCEPTED);
+    if (rc != MQTT_RC_CODE::ERR_SUCCESS) {
+        co_return MQTT_RC_CODE::ERR_NO_CONN;
+    }
 
     // 添加自动订阅项
     this->add_subscribe(MqttConfig::getInstance()->auto_subscribe_list());
