@@ -72,6 +72,7 @@ bool MqttLimits::load_limits(const std::string& limits_file) {
             }
         }
 
+        enable_ = true;
     } catch (const std::exception& e) {
         SPDLOG_ERROR("limits file config error: [{}]", e.what());
         return false;
@@ -80,26 +81,26 @@ bool MqttLimits::load_limits(const std::string& limits_file) {
 }
 
 bool MqttLimits::check_pub_limit(const std::string& client_id) {
-    if (!enable_) return false;
+    if (!enable_) return true;
 
     std::string group_name = get_group_name(client_id);
 
     auto it = pub_rate_limitor_.find(group_name);
     if (it == pub_rate_limitor_.end() || it->second == nullptr) {
-        return false;
+        return true;
     }
 
     return it->second->tryConsume();
 }
 
 bool MqttLimits::check_sub_limit(const std::string& client_id) {
-    if (!enable_) return false;
+    if (!enable_) return true;
 
     std::string group_name = get_group_name(client_id);
 
     auto it = sub_rate_limitor_.find(group_name);
     if (it == sub_rate_limitor_.end() || it->second == nullptr) {
-        return false;
+        return true;
     }
 
     return it->second->tryConsume();

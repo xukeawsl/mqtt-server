@@ -1886,14 +1886,14 @@ asio::awaitable<MQTT_RC_CODE> MqttSession<SocketType>::handle_publish() {
 
     // 报文读取完毕, 对于 qos1 和 qos2 级别需要发送响应报文
     if (qos == 0) {
-        if (MqttLimits::getInstance()->check_pub_limit(this->client_id)) {
+        if (!MqttLimits::getInstance()->check_pub_limit(this->client_id)) {
             co_return rc;
         }
 
         MqttExposer::getInstance()->inc_mqtt_pub_topic_count_metric(
             this->client_id, MQTT_QUALITY::Qos0);
     } else if (qos == 1) {
-        if (MqttLimits::getInstance()->check_pub_limit(this->client_id)) {
+        if (!MqttLimits::getInstance()->check_pub_limit(this->client_id)) {
             rc = co_await send_publimit(packet_id);
             co_return rc;
         }
@@ -1906,7 +1906,7 @@ asio::awaitable<MQTT_RC_CODE> MqttSession<SocketType>::handle_publish() {
         MqttExposer::getInstance()->inc_mqtt_pub_topic_count_metric(
             this->client_id, MQTT_QUALITY::Qos1);
     } else if (qos == 2) {
-        if (MqttLimits::getInstance()->check_pub_limit(this->client_id)) {
+        if (!MqttLimits::getInstance()->check_pub_limit(this->client_id)) {
             rc = co_await send_publimit(packet_id);
             co_return rc;
         }
@@ -2198,7 +2198,7 @@ asio::awaitable<MQTT_RC_CODE> MqttSession<SocketType>::handle_subscribe() {
             }
         }
 
-        if (MqttLimits::getInstance()->check_sub_limit(this->client_id)) {
+        if (!MqttLimits::getInstance()->check_sub_limit(this->client_id)) {
             tmp_qos = 0x80;
         }
 
