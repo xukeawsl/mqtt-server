@@ -3,6 +3,7 @@
 MqttTokenBucket::MqttTokenBucket(double tokensPerSecond)
     : tokensPerSecond_(tokensPerSecond),
       maxTokens_(tokensPerSecond),
+      tokens_(tokensPerSecond),
       lastRefillTime_(std::chrono::steady_clock::now()) {}
 
 MqttTokenBucket::MqttTokenBucket(double tokensPerSecond, double maxTokens)
