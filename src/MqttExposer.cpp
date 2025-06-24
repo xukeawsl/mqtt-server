@@ -184,7 +184,7 @@ void MqttExposer::init_mqtt_pub_topic_limit_count_metric() {
     auto [_, m] = mqtt_dynamic_metric_manager::instance()
                       ->create_metric_dynamic<ylt::metric::dynamic_counter_3t>(
                           s_mqtt_pub_topic_limit_count,
-                          "Number of subscribe MQTT limited topics",
+                          "Number of publish MQTT limited topics",
                           std::array<std::string, 3>{"limit_group", "client_id",
                                                      "quality"});
 
@@ -195,7 +195,7 @@ void MqttExposer::init_mqtt_sub_topic_limit_count_metric() {
     auto [_, m] = mqtt_dynamic_metric_manager::instance()
                       ->create_metric_dynamic<ylt::metric::dynamic_counter_3t>(
                           s_mqtt_sub_topic_limit_count,
-                          "Number of publish MQTT limited topics",
+                          "Number of subscribe MQTT limited topics",
                           std::array<std::string, 3>{"limit_group", "client_id",
                                                      "quality"});
 
