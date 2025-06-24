@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 #pragma once
+#include <atomic>
 #include <functional>
 #include <string_view>
 #include <utility>
@@ -42,7 +43,13 @@ class logger {
     return instance;
   }
 
-  void operator+=(record_t &record) { write(record); }
+  void operator+=(record_t &record) {
+    if (has_destruct_) [[unlikely]] {
+      return;
+    }
+
+    write(record);
+  }
 
   void write(record_t &record) {
     if (async_ && appender_) {
@@ -75,7 +82,9 @@ class logger {
     enable_console_ = enable_console;
   }
 
-  bool check_severity(Severity severity) { return severity >= min_severity_; }
+  bool check_severity(Severity severity) {
+    return severity >= min_severity_.load(std::memory_order::relaxed);
+  }
 
   void add_appender(std::function<void(std::string_view)> fn) {
     appenders_.emplace_back(std::move(fn));
@@ -85,7 +94,9 @@ class logger {
 
   // set and get
   void set_min_severity(Severity severity) { min_severity_ = severity; }
-  Severity get_min_severity() { return min_severity_; }
+  Severity get_min_severity() {
+    return min_severity_.load(std::memory_order::relaxed);
+  }
 
   void set_console(bool enable) {
     enable_console_ = enable;
@@ -97,6 +108,7 @@ class logger {
 
   void set_async(bool enable) { async_ = enable; }
   bool get_async() { return async_; }
+  ~logger() { has_destruct_ = true; }
 
  private:
   logger() {
@@ -122,7 +134,7 @@ class logger {
     }
   }
 
-  Severity min_severity_ =
+  std::atomic<Severity> min_severity_ =
 #if NDEBUG
       Severity::WARN;
 #else
@@ -132,6 +144,7 @@ class logger {
   bool enable_console_ = true;
   appender *appender_ = nullptr;
   std::vector<std::function<void(std::string_view)>> appenders_;
+  inline static std::atomic<bool> has_destruct_ = false;
 };
 
 template <size_t Id = 0>

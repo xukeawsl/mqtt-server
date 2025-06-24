@@ -47,8 +47,7 @@ template <typename T>
 inline constexpr bool enum_v = std::is_enum_v<std::decay_t<T>>;
 
 template <typename T>
-constexpr inline bool optional_v =
-    is_template_instant_of<std::optional, std::remove_cvref_t<T>>::value;
+constexpr inline bool optional_v = ylt::reflection::optional<T>;
 
 template <class, class = void>
 struct is_container : std::false_type {};
@@ -90,7 +89,13 @@ template <typename T>
 constexpr inline bool array_v = is_array<std::remove_cvref_t<T>>::value;
 
 template <typename Type>
-constexpr inline bool fixed_array_v = c_array_v<Type> || array_v<Type>;
+constexpr inline bool fixed_array_v = c_array_v<Type> ||
+#if __cplusplus > 201703L
+#if __has_include(<span>)
+                                      is_span<Type>::value ||
+#endif
+#endif
+                                      array_v<Type>;
 
 template <typename T>
 constexpr inline bool string_view_v =
@@ -195,6 +200,14 @@ struct underline_type<std::optional<T>> {
 
 template <typename T>
 using underline_type_t = typename underline_type<std::remove_cvref_t<T>>::type;
+
+struct memory_writer {
+  char* buffer;
+  void write(const char* data, std::size_t len) {
+    memcpy(buffer, data, len);
+    buffer += len;
+  }
+};
 
 template <char... C, typename It>
 IGUANA_INLINE void match(It&& it, It&& end) {

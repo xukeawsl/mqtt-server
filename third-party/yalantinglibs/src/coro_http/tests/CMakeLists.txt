@@ -6,10 +6,10 @@ set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_INCLUDE_CURRENT_DIR ON)
 find_package(Threads REQUIRED)
-#find_package(ZLIB)
-#if (ZLIB_FOUND)
-#    add_definitions(-DCINATRA_ENABLE_GZIP)
-#endif ()
+find_package(ZLIB)
+if (ZLIB_FOUND)
+    add_definitions(-DCINATRA_ENABLE_GZIP)
+endif ()
 link_libraries(Threads::Threads)
 
 include_directories(include)
@@ -22,7 +22,6 @@ if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
 endif()
 
 add_executable(coro_http_test
-        test_mixed.cpp
         test_coro_http_server.cpp
         test_cinatra.cpp
         test_cinatra_websocket.cpp
@@ -41,8 +40,8 @@ add_custom_command(
         ${CMAKE_CURRENT_SOURCE_DIR}/openssl_files
         ${CMAKE_BINARY_DIR}/output/openssl_files)
 
-# add_definitions(-DINJECT_FOR_HTTP_CLIENT_TEST)
-# add_definitions(-DINJECT_FOR_HTTP_SEVER_TEST)
+add_definitions(-DINJECT_FOR_HTTP_CLIENT_TEST)
+add_definitions(-DINJECT_FOR_HTTP_SEVER_TEST)
 
 add_test(NAME coro_http_test COMMAND coro_http_test)
 # target_compile_definitions(easylog_test PRIVATE STRUCT_PACK_ENABLE_UNPORTABLE_TYPE)

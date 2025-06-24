@@ -16,6 +16,5 @@
 #pragma once
 
 #include <iguana/json_writer.hpp>
-#include <iguana/prettify.hpp>
 
 namespace struct_json = iguana;

@@ -15,17 +15,18 @@ enum class op_type_t { INC, DEC, SET };
 
 #ifdef CINATRA_ENABLE_METRIC_JSON
 struct json_counter_metric_t {
-  std::map<std::string, std::string> labels;
+  std::vector<std::string_view> labels;
   std::variant<int64_t, double> value;
 };
 YLT_REFL(json_counter_metric_t, labels, value);
 struct json_counter_t {
-  std::string name;
-  std::string help;
-  std::string type;
+  std::string_view name;
+  std::string_view help;
+  std::string_view type;
+  std::vector<std::string_view> labels_name;
   std::vector<json_counter_metric_t> metrics;
 };
-YLT_REFL(json_counter_t, name, help, type, metrics);
+YLT_REFL(json_counter_t, name, help, type, labels_name, metrics);
 #endif
 
 template <typename value_type>
@@ -50,18 +51,15 @@ class basic_static_counter : public static_metric {
         default_label_value_(dupli_count_) {}
 
   void inc(value_type val = 1) {
-    if (val < 0) {
+    if (val <= 0) {
       return;
-    }
-    if (!has_change_) [[unlikely]] {
-      has_change_ = true;
     }
     default_label_value_.inc(val);
   }
 
   value_type update(value_type value) {
-    if (!has_change_) [[unlikely]] {
-      has_change_ = true;
+    if (!has_change_.load(std::memory_order::relaxed)) [[unlikely]] {
+      has_change_.store(true, std::memory_order::relaxed);
     }
     return default_label_value_.update(value);
   }
@@ -72,7 +70,7 @@ class basic_static_counter : public static_metric {
 
   void serialize(std::string &str) override {
     auto value = default_label_value_.value();
-    if (value == 0 && !has_change_) {
+    if (value == 0 && !has_change_.load(std::memory_order::relaxed)) {
       return;
     }
 
@@ -83,13 +81,22 @@ class basic_static_counter : public static_metric {
 #ifdef CINATRA_ENABLE_METRIC_JSON
   void serialize_to_json(std::string &str) override {
     auto value = default_label_value_.value();
-    if (value == 0 && !has_change_) {
+    if (value == 0 && !has_change_.load(std::memory_order::relaxed)) {
       return;
     }
 
-    json_counter_t counter{name_, help_, std::string(metric_name())};
+    json_counter_t counter{name_, help_, metric_name()};
 
-    counter.metrics.push_back({static_labels_, value});
+    counter.labels_name.reserve(static_labels_.size());
+    for (auto &[k, _] : static_labels_) {
+      counter.labels_name.emplace_back(k);
+    }
+    counter.metrics.resize(1);
+    counter.metrics[0].labels.reserve(static_labels_.size());
+    for (auto &[k, _] : static_labels_) {
+      counter.metrics[0].labels.emplace_back(k);
+    }
+    counter.metrics[0].value = value;
     iguana::to_json(counter, str);
   }
 #endif
@@ -119,7 +126,7 @@ class basic_static_counter : public static_metric {
     str.pop_back();
   }
 
-  bool has_change_ = false;
+  std::atomic<bool> has_change_ = false;
   uint32_t dupli_count_;
   thread_local_value<value_type> default_label_value_;
 };
@@ -260,8 +267,11 @@ class basic_dynamic_counter
 #ifdef CINATRA_ENABLE_METRIC_JSON
   void serialize_to_json(std::string &str) override {
     auto map = Base::copy();
-    json_counter_t counter{Base::name_, Base::help_,
-                           std::string{Base::metric_name()}};
+    json_counter_t counter{Base::name_, Base::help_, Base::metric_name()};
+    counter.labels_name.reserve(Base::labels_name().size());
+    for (auto &e : Base::labels_name()) {
+      counter.labels_name.emplace_back(e);
+    }
     to_json(counter, map, str);
   }
 
@@ -272,9 +282,9 @@ class basic_dynamic_counter
       auto &val = e->value;
       json_counter_metric_t metric;
       size_t index = 0;
-      assert(Base::labels_name().size() == k.size());
+      metric.labels.reserve(k.size());
       for (auto &label_value : k) {
-        metric.labels.emplace(Base::labels_name()[index++], label_value);
+        metric.labels.emplace_back(label_value);
       }
       metric.value = val.load(std::memory_order::relaxed);
       counter.metrics.push_back(std::move(metric));

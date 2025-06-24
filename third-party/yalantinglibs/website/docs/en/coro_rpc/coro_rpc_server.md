@@ -40,6 +40,44 @@ int start_server() {
 }
 ```
 
+### Add HTTP Service or Other Services on the RPC Port
+We can add a sub-server by calling the `add_subserver()` method.
+
+For example, if you want to listen to an HTTP server at the same time, you can use the following code:
+```cpp
+coro_rpc_server server(/*thread=*/std::thread::hardware_concurrency(),
+                       /*port=*/8801);
+auto http_server = std::make_unique<coro_http::coro_http_server>(0, 0);
+std::function dispatcher = [](coro_io::socket_wrapper_t&& soc,
+                              std::string_view magic_number,
+                              coro_http::coro_http_server& server) {
+  server.transfer_connection(std::move(soc), magic_number);
+};
+server.add_subserver(std::move(dispatcher), std::move(http_server));
+```
+
+`magic_number` is the first byte sent by the client. When the client establishes a connection and initiates the first request, the RPC server checks whether the first byte matches the coro_rpc magic number `21`. If the magic number is incorrect, the connection will be released, and the user-registered dispatcher method will be invoked. The user should dispatch based on the magic number within the dispatcher function and forward the connection to the correct server.
+
+Notably, the `add_subserver()` method allows adding multiple sub-servers, enabling us to start multiple servers on the same port.
+
+```cpp
+coro_rpc_server server(/*thread=*/std::thread::hardware_concurrency(),
+                       /*port=*/8801);
+auto rest_server = std::make_unique<coro_rest_server>(0, 0);
+auto http_server = std::make_unique<coro_http::coro_http_server>(0, 0);
+std::function dispatcher = [](coro_io::socket_wrapper_t&& soc,
+                              std::string_view magic_number,
+                              coro_http::coro_http_server& server, coro_rest_server& rest_server) {
+  if (magic_number == (char)16) { // rest server
+    server.transfer_connection(std::move(soc), magic_number);
+  }
+  else { //http
+    rest_server.transfer_connection(std::move(soc), magic_number);
+  }
+};
+server.add_subserver(std::move(dispatcher), std::move(http_server), std::move(rest_server));
+```
+
 coro_rpc supports the registration and calling of three types of RPC functions:
 
 1. Ordinary RPC Functions
@@ -358,6 +396,16 @@ server.init_ssl({
 
 After enabling SSL support, the server will reject all non-SSL connections.
 
+## RDMA Support
+
+
+```cpp
+coro_rpc_server server;
+server.init_ibv(ibverbs_config{});
+```
+
+After enabling RDMA support, the server will reject all non-rdma connections.
+
 ## Advanced Settings
 
 We provide the coro_rpc::config_t class, which allows users to set the details of the server:
@@ -372,6 +420,8 @@ struct config_base {
   std::string address="0.0.0.0"; /* Listening address */
   /* The following settings are only applicable if SSL is enabled */
   std::optional<ssl_configure> ssl_config = std::nullopt; // Configure whether to enable ssl
+  /* The following settings are only applicable if rdma is enabled */
+  std::optional<coro_io::ibverbs_config> ibv_config = std::nullopt; // Configure whether to enable rdma
 };
 struct ssl_configure {
   std::string base_path;  // Base path of ssl files.

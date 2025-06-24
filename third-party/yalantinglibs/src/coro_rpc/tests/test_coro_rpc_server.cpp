@@ -45,6 +45,11 @@ struct CoroServerTester : ServerTester {
           ssl_configure{"../openssl_files", "server.crt", "server.key"});
     }
 #endif
+#ifdef YLT_ENABLE_IBV
+    if (use_rdma) {
+      server.init_ibv();
+    }
+#endif
     auto res = server.async_start();
     CHECK_MESSAGE(!res.hasResult(), "server start timeout");
   }
@@ -220,7 +225,6 @@ struct CoroServerTester : ServerTester {
     REQUIRE_MESSAGE(ret.error().code == coro_rpc::errc::io_error,
                     ret.error().msg);
     CHECK(client->has_closed() == true);
-    server.register_handler<function_not_registered>();
   }
 
   void test_server_start_again() {
@@ -291,12 +295,32 @@ TEST_CASE("testing coro rpc server") {
   ELOGV(INFO, "run testing coro rpc server");
   unsigned short server_port = 8810;
   auto conn_timeout_duration = 500ms;
-  std::vector<bool> switch_list{true, false};
+  std::vector<int> switch_list{0
+#ifdef YLT_ENABLE_SSL
+                               ,
+                               1
+#endif
+#ifdef YLT_ENABLE_IBV
+                               ,
+                               2
+#endif
+  };
   for (auto enable_heartbeat : switch_list) {
-    for (auto use_ssl : switch_list) {
+    for (auto type : switch_list) {
       TesterConfig config;
       config.enable_heartbeat = enable_heartbeat;
-      config.use_ssl = use_ssl;
+      if (type == 0) {
+        config.use_ssl = false;
+        config.use_rdma = false;
+      }
+      else if (type == 1) {
+        config.use_ssl = true;
+        config.use_rdma = false;
+      }
+      else if (type == 2) {
+        config.use_ssl = false;
+        config.use_rdma = true;
+      }
       config.sync_client = false;
       config.use_outer_io_context = false;
       config.port = server_port;
@@ -340,7 +364,7 @@ TEST_CASE("test server accept error") {
   server.register_handler<hi>();
   auto res = server.async_start();
   CHECK_MESSAGE(!res.hasResult(), "server start timeout");
-  coro_rpc_client client(*coro_io::get_global_executor(), g_client_id++);
+  coro_rpc_client client(coro_io::get_global_executor());
   ELOGV(INFO, "run test server accept error, client_id %d",
         client.get_client_id());
   auto ec = syncAwait(client.connect("127.0.0.1", "8810"));
@@ -425,7 +449,7 @@ TEST_CASE("testing coro rpc write error") {
   server.register_handler<hi>();
   auto res = server.async_start();
   CHECK_MESSAGE(!res.hasResult(), "server start failed");
-  coro_rpc_client client(*coro_io::get_global_executor(), g_client_id++);
+  coro_rpc_client client(coro_io::get_global_executor());
   ELOGV(INFO, "run testing coro rpc write error, client_id %d",
         client.get_client_id());
   auto ec = syncAwait(client.connect("127.0.0.1", "8810"));
@@ -468,7 +492,7 @@ TEST_CASE("testing coro rpc subserver") {
   server.add_subserver(std::move(dispatcher), std::move(http_server));
   auto res = server.async_start();
   CHECK_MESSAGE(!res.hasResult(), "server start failed");
-  coro_rpc_client client(*coro_io::get_global_executor(), g_client_id++);
+  coro_rpc_client client(coro_io::get_global_executor());
   auto ec = syncAwait(client.connect("127.0.0.1", "8810"));
   REQUIRE_MESSAGE(!ec,
                   std::to_string(client.get_client_id()).append(ec.message()));
@@ -514,7 +538,7 @@ TEST_CASE("testing coro rpc ssl subserver") {
   server.add_subserver(std::move(dispatcher), std::move(http_server));
   auto res = server.async_start();
   CHECK_MESSAGE(!res.hasResult(), "server start failed");
-  coro_rpc_client client(*coro_io::get_global_executor(), g_client_id++);
+  coro_rpc_client client(coro_io::get_global_executor());
   CHECK(client.init_ssl("../openssl_files", "server.crt"));
   auto ec = syncAwait(client.connect("127.0.0.1", "8810"));
   REQUIRE_MESSAGE(!ec,
@@ -529,7 +553,7 @@ TEST_CASE("testing coro rpc ssl subserver") {
   CHECK_MESSAGE(!result.net_err, result.net_err.message());
   result = syncAwait(cli.async_get("/index.html"));
   CHECK_MESSAGE(result.status == (int)coro_http::status_type::ok,
-                result.status);
+                result.net_err.message());
   CHECK_MESSAGE(result.resp_body == http_body, result.resp_body);
 }
 #endif

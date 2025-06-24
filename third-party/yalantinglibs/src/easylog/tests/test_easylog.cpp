@@ -31,7 +31,6 @@ std::string get_last_line(const std::string& filename) {
       last_line = std::move(temp);
     }
   }
-
   return last_line;
 }
 
@@ -70,6 +69,10 @@ TEST_CASE("test basic") {
       std::chrono::system_clock::from_time_t(now);
   ELOG_INFO << pt;
   ELOG_INFO << std::chrono::system_clock::now();
+
+  ELOG_INFO << "test begin";
+  std::this_thread::sleep_for(std::chrono::milliseconds(15));
+  ELOG_INFO << "test end";
 
   easylog::set_console(false);
   ELOG_INFO << "no console";

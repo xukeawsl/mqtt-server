@@ -2,10 +2,6 @@
 
 #include <memory>
 
-#include "asio/basic_stream_socket.hpp"
-#include "asio/bind_executor.hpp"
-#include "asio/executor.hpp"
-#include "asio/ip/tcp.hpp"
 #include "cinatra/coro_http_client.hpp"
 #include "cinatra/coro_http_response.hpp"
 #include "cinatra/coro_http_router.hpp"
@@ -16,7 +12,7 @@
 #include "ylt/coro_io/coro_file.hpp"
 #include "ylt/coro_io/coro_io.hpp"
 #include "ylt/coro_io/io_context_pool.hpp"
-#include "ylt/coro_io/load_blancer.hpp"
+#include "ylt/coro_io/load_balancer.hpp"
 
 namespace cinatra {
 enum class file_resp_format_type {
@@ -68,6 +64,10 @@ class coro_http_server {
 
   void set_no_delay(bool r) { no_delay_ = r; }
 
+  void set_max_http_body_size(int64_t max_size) {
+    max_http_body_len_ = max_size;
+  }
+
 #ifdef CINATRA_ENABLE_SSL
   void init_ssl(const std::string &cert_file, const std::string &key_file,
                 const std::string &passwd) {
@@ -94,6 +94,7 @@ class coro_http_server {
 
     if (!errc_) {
       if (out_ctx_ == nullptr) {
+        std::lock_guard lock(thd_mtx_);
         thd_ = std::thread([this] {
           pool_->run();
         });
@@ -118,13 +119,14 @@ class coro_http_server {
 
   // only call once, not thread safe.
   void stop() {
-    if (out_ctx_ == nullptr && !thd_.joinable()) {
-      return;
+    {
+      std::lock_guard lock(thd_mtx_);
+      if (out_ctx_ == nullptr && !thd_.joinable()) {
+        return;
+      }
     }
 
     stop_timer_ = true;
-    std::error_code ec;
-    check_timer_.cancel(ec);
 
     close_acceptor();
 
@@ -142,7 +144,11 @@ class coro_http_server {
       pool_->stop();
 
       CINATRA_LOG_INFO << "server's thread-pool finished.";
-      thd_.join();
+      {
+        std::lock_guard lock(thd_mtx_);
+        thd_.join();
+      }
+
       CINATRA_LOG_INFO << "stop coro_http_server ok";
     }
     else {
@@ -194,23 +200,23 @@ class coro_http_server {
   template <http_method... method, typename... Aspects>
   void set_http_proxy_handler(std::string url_path,
                               std::vector<std::string_view> hosts,
-                              coro_io::load_blance_algorithm type =
-                                  coro_io::load_blance_algorithm::random,
+                              coro_io::load_balance_algorithm type =
+                                  coro_io::load_balance_algorithm::random,
                               std::vector<int> weights = {},
                               Aspects &&...aspects) {
     if (hosts.empty()) {
       throw std::invalid_argument("not config hosts yet!");
     }
 
-    auto load_blancer =
-        std::make_shared<coro_io::load_blancer<coro_http_client>>(
-            coro_io::load_blancer<coro_http_client>::create(
+    auto load_balancer =
+        std::make_shared<coro_io::load_balancer<coro_http_client>>(
+            coro_io::load_balancer<coro_http_client>::create(
                 hosts, {.lba = type}, weights));
     auto handler =
-        [this, load_blancer, type](
+        [this, load_balancer, type](
             coro_http_request &req,
             coro_http_response &response) -> async_simple::coro::Lazy<void> {
-      co_await load_blancer->send_request(
+      co_await load_balancer->send_request(
           [this, &req, &response](
               coro_http_client &client,
               std::string_view host) -> async_simple::coro::Lazy<void> {
@@ -234,22 +240,22 @@ class coro_http_server {
   template <http_method... method, typename... Aspects>
   void set_websocket_proxy_handler(std::string url_path,
                                    std::vector<std::string_view> hosts,
-                                   coro_io::load_blance_algorithm type =
-                                       coro_io::load_blance_algorithm::random,
+                                   coro_io::load_balance_algorithm type =
+                                       coro_io::load_balance_algorithm::random,
                                    std::vector<int> weights = {},
                                    Aspects &&...aspects) {
     if (hosts.empty()) {
       throw std::invalid_argument("not config hosts yet!");
     }
 
-    auto load_blancer =
-        std::make_shared<coro_io::load_blancer<coro_http_client>>(
-            coro_io::load_blancer<coro_http_client>::create(
+    auto load_balancer =
+        std::make_shared<coro_io::load_balancer<coro_http_client>>(
+            coro_io::load_balancer<coro_http_client>::create(
                 hosts, {.lba = type}, weights));
 
     set_http_handler<cinatra::GET>(
         url_path,
-        [load_blancer](coro_http_request &req, coro_http_response &resp)
+        [load_balancer](coro_http_request &req, coro_http_response &resp)
             -> async_simple::coro::Lazy<void> {
           websocket_result result{};
           while (true) {
@@ -263,25 +269,29 @@ class coro_http_server {
               break;
             }
 
-            co_await load_blancer->send_request(
-                [&req, result](
-                    coro_http_client &client,
-                    std::string_view host) -> async_simple::coro::Lazy<void> {
+            auto ret = co_await load_balancer->send_request(
+                [&req, result](coro_http_client &client, std::string_view host)
+                    -> async_simple::coro::Lazy<std::error_code> {
                   auto r =
                       co_await client.write_websocket(std::string(result.data));
                   if (r.net_err) {
-                    co_return;
+                    co_return r.net_err;
                   }
                   auto data = co_await client.read_websocket();
                   if (data.net_err) {
-                    co_return;
+                    co_return data.net_err;
                   }
                   auto ec = co_await req.get_conn()->write_websocket(
                       std::string(result.data));
                   if (ec) {
-                    co_return;
+                    co_return ec;
                   }
+                  co_return std::error_code{};
                 });
+            if (!ret.has_value()) {
+              req.get_conn()->close();
+              break;
+            }
           }
         },
         std::forward<Aspects>(aspects)...);
@@ -320,6 +330,12 @@ class coro_http_server {
 
   void set_transfer_chunked_size(size_t size) { chunked_size_ = size; }
 
+#ifdef INJECT_FOR_HTTP_SEVER_TEST
+  void set_write_failed_forever(bool r) { write_failed_forever_ = r; }
+
+  void set_read_failed_forever(bool r) { read_failed_forever_ = r; }
+#endif
+
   template <typename... Aspects>
   void set_static_res_dir(std::string_view uri_suffix = "",
                           std::string file_path = "www", Aspects &&...aspects) {
@@ -337,7 +353,14 @@ class coro_http_server {
     }
 
     if (!file_path.empty()) {
-      static_dir_ = std::filesystem::path(file_path).make_preferred().string();
+      file_path = std::filesystem::path(file_path).filename().string();
+      if (file_path.empty()) {
+        static_dir_ = fs::absolute(fs::current_path().string()).string();
+      }
+      else {
+        static_dir_ =
+            std::filesystem::path(file_path).make_preferred().string();
+      }
     }
     else {
       static_dir_ = fs::absolute(fs::current_path().string()).string();
@@ -456,13 +479,7 @@ class coro_http_server {
                 if (ranges.size() == 1) {
                   // single part
                   auto [start, end] = ranges[0];
-                  bool ok = in_file.seek(start, std::ios::beg);
-                  if (!ok) {
-                    resp.set_status_and_content(status_type::bad_request,
-                                                "invalid range");
-                    co_await resp.get_conn()->reply();
-                    co_return;
-                  }
+                  in_file.seek(start, std::ios::beg);
                   size_t part_size = end + 1 - start;
                   int status = (part_size == file_size) ? 200 : 206;
                   std::string content_range = "Content-Range: bytes ";
@@ -485,7 +502,7 @@ class coro_http_server {
                                             part_size);
                 }
                 else {
-                  // multipart ranges
+                  // multiple ranges
                   resp.set_delay(true);
                   std::string file_size_str = std::to_string(file_size);
                   size_t content_len = 0;
@@ -590,7 +607,7 @@ class coro_http_server {
 
  private:
   std::error_code listen() {
-    CINATRA_LOG_INFO << "begin to listen";
+    CINATRA_LOG_INFO << "begin to listen " << port_;
     using asio::ip::tcp;
     asio::error_code ec;
 
@@ -653,7 +670,7 @@ class coro_http_server {
                            std::string_view head_msg) {
     auto conn = accept_impl(std::move(soc), true);
     conn->add_head(head_msg);
-    start_one(conn).via(conn->get_executor()).detach();
+    start_one(conn, true).via(conn->get_executor()).detach();
   }
 
  private:
@@ -666,6 +683,7 @@ class coro_http_server {
     if (no_delay_) {
       conn->tcp_socket().set_option(asio::ip::tcp::no_delay(true));
     }
+    conn->set_max_http_body_size(max_http_body_len_);
     if (need_shrink_every_time_) {
       conn->set_shrink_to_fit(true);
     }
@@ -739,6 +757,11 @@ class coro_http_server {
   async_simple::coro::Lazy<void> start_one(
       std::shared_ptr<coro_http_connection> conn) noexcept {
     co_await conn->start();
+  }
+
+  async_simple::coro::Lazy<void> start_one(
+      std::shared_ptr<coro_http_connection> conn, bool has_shake) noexcept {
+    co_await conn->start(has_shake);
   }
 
   void close_acceptor() {
@@ -878,6 +901,43 @@ class coro_http_server {
     co_return true;
   }
 
+  template <class T, class Pred>
+  size_t erase_if(std::span<T> &sp, Pred p) {
+    auto it = std::remove_if(sp.begin(), sp.end(), p);
+    size_t count = sp.end() - it;
+    sp = std::span<T>(sp.data(), sp.data() + count);
+    return count;
+  }
+
+  int remove_result_headers(resp_data &result, std::string_view value) {
+    bool r = false;
+    return erase_if(result.resp_headers, [&](http_header &header) {
+      if (r) {
+        return false;
+      }
+
+      r = (header.value.find(value) != std::string_view::npos);
+
+      return r;
+    });
+  }
+
+  void handle_response_header(resp_data &result, std::string &length) {
+    int r = remove_result_headers(result, "chunked");
+    if (r == 0) {
+      r = remove_result_headers(result, "multipart/form-data");
+      if (r) {
+        length = std::to_string(result.resp_body.size());
+        for (auto &[key, val] : result.resp_headers) {
+          if (key == "Content-Length") {
+            val = length;
+            break;
+          }
+        }
+      }
+    }
+  }
+
   async_simple::coro::Lazy<void> reply(coro_http_client &client,
                                        std::string_view host,
                                        coro_http_request &req,
@@ -903,6 +963,8 @@ class coro_http_server {
         req.full_url(), method_type(req.get_method()), std::move(ctx),
         std::move(req_headers));
 
+    std::string length;
+    handle_response_header(result, length);
     response.add_header_span(result.resp_headers);
 
     response.set_status_and_content_view(
@@ -944,6 +1006,7 @@ class coro_http_server {
   std::error_code errc_ = {};
   asio::ip::tcp::acceptor acceptor_;
   std::thread thd_;
+  std::mutex thd_mtx_;
   std::promise<void> acceptor_close_waiter_;
   bool no_delay_ = true;
 
@@ -976,6 +1039,11 @@ class coro_http_server {
   std::function<async_simple::coro::Lazy<void>(coro_http_request &,
                                                coro_http_response &)>
       default_handler_ = nullptr;
+  int64_t max_http_body_len_ = MAX_HTTP_BODY_SIZE;
+#ifdef INJECT_FOR_HTTP_SEVER_TEST
+  bool write_failed_forever_ = false;
+  bool read_failed_forever_ = false;
+#endif
 };
 
 using http_server = coro_http_server;

@@ -43,9 +43,28 @@ You can also use cmake option `-DENABLE_CPP_20=ON` or `-DENABLE_CPP_20=OFF` to c
 
 ## Install & Compile
 
-Yalantinglibs is a head-only library. You can just copy `./include/ylt` directory into your project. But we suggest you use cmake to install it.
+### By Homebrew
 
-### Install
+1. Install [homebrew](https://brew.sh/)
+2. run `brew install yalantinglibs`
+3. If you use cmake, add those codes:
+```cmake
+find_package(yalantinglibs CONFIG REQUIRED)
+target_link_libraries(main PRIVATE yalantinglibs::yalantinglibs)
+```
+
+### By Vcpkg
+
+1. Install [vcpkg](https://github.com/microsoft/vcpkg)
+2. run `./vcpkg install yalantinglibs`
+3. If you use cmake, add those codes:
+```cmake
+find_package(yalantinglibs CONFIG REQUIRED)
+target_link_libraries(main PRIVATE yalantinglibs::yalantinglibs)
+```
+### Manually Install
+
+Yalantinglibs is a head-only library. You can just copy `./include/ylt` directory into your project. But we suggest you use cmake to install it.
 
 1. clone repo
 
@@ -73,6 +92,9 @@ bazel build ylt # Please make sure bazel in you bin path.
 bazel build coro_http_example # Or replace in anyone you want to build and test.
 # Actually you might take it in other project in prefix @com_alibaba_yalangtinglibs, like
 bazel build @com_alibaba_yalangtinglibs://ylt
+
+bazel version > 7
+bazel build ylt --enable_bzlmod
 ```
 
 You can see the test/example/benchmark executable file in `./build/output/`.
@@ -115,8 +137,8 @@ include(FetchContent)
 
 FetchContent_Declare(
     yalantinglibs
-    GIT_REPOSITORY https://github.com/JYLeeLYJ/yalantinglibs.git
-    GIT_TAG feat/fetch # optional ( default master / main )
+    GIT_REPOSITORY https://github.com/alibaba/yalantinglibs.git
+    GIT_TAG 0766d839fe52eb12ac7ecd34bc39a76399cfde41 # optional ( default master / main )
     GIT_SHALLOW 1 # optional ( --depth=1 )
 )
 
@@ -250,7 +272,6 @@ struct person {
   std::string name;
   int age;
 };
-YLT_REFL(person, name, age);
 
 int main() {
   person p{.name = "tom", .age = 20};
@@ -274,7 +295,6 @@ struct person {
   std::string name;
   int age;
 };
-YLT_REFL(person, name, age);
 
 void basic_usage() {
   std::string xml = R"(
@@ -308,7 +328,6 @@ struct person {
   std::string name;
   int age;
 };
-YLT_REFL(person, name, age);
 
 void basic_usage() {
     // serialization the structure to the string
@@ -524,6 +543,28 @@ options:
 ./benchmark_client # [threads = hardware counts] [client_pre_thread = 20] [pipeline_size = 1] [host = 127.0.0.1] [port = 9000] [test_data_path = ./test_data/echo_test] [test_seconds = 30] [warm_up_seconds = 5]
 ```
 
+## cross language support
+### how to use coro_http with python
+See `yalantinglibs/src/coro_http/examples/py_example`
+
+#### build and run py_example
+- Set option `ENABLE_pybind11`(in `yalantinglibs/src/coro_http/examples/CMakeLists.txt`) `ON` and then build `py_example`.
+
+- go to `yalantinglibs/src/coro_http/examples/py_example`
+
+- python3 test.py
+
+### how to use coro_rpc with golang
+See `yalantinglibs/src/coro_rpc/examples/basic_example/go_example`
+
+#### build and run go_example
+- Set option `ENABLE_go`(in `yalantinglibs/src/coro_rpc/examples/base_examples/CMakeLists.txt`) `ON` and then build `coro_rpc`.
+
+- go to `yalantinglibs/src/coro_rpc/examples/base_examples/go_example`
+
+- go build test_rpc.go
+
+- ./test_rpc
 
 ## How to generate document
 

@@ -156,7 +156,7 @@ inline constexpr auto& get(T& t) {
   return std::get<index>(ref_tp);
 }
 
-#if __has_include(<concetps>)
+#if __cplusplus >= 202002L
 template <FixedString name, typename T>
 inline constexpr auto& get(T& t) {
   constexpr size_t index = index_of<T, name>();
@@ -174,6 +174,13 @@ inline size_t index_of(T& t, Field& value) {
   }
 
   return std::distance(offset_arr.begin(), it);
+}
+
+template <typename Member>
+inline size_t index_of(Member member) {
+  using T = typename member_traits<Member>::owner_type;
+  static auto& t = internal::get_fake_object<T>();
+  return index_of(t, t.*member);
 }
 
 template <typename T, typename Field>
@@ -215,7 +222,7 @@ inline constexpr void for_each(T&& t, Visit&& func) {
   else {
     if constexpr (std::is_invocable_v<Visit, first_t, std::string_view>) {
       visit_members(t, [&](auto&... args) {
-#if __cplusplus >= 202002L
+#if __cplusplus >= 202002L && (!defined(_MSC_VER) || _MSC_VER >= 1930)
         [&]<size_t... Is>(std::index_sequence<Is...>) mutable {
           constexpr auto arr = get_member_names<T>();
           (func(args, arr[Is]), ...);
@@ -231,7 +238,7 @@ inline constexpr void for_each(T&& t, Visit&& func) {
     else if constexpr (std::is_invocable_v<Visit, first_t, std::string_view,
                                            size_t>) {
       visit_members(t, [&](auto&... args) {
-#if __cplusplus >= 202002L
+#if __cplusplus >= 202002L && (!defined(_MSC_VER) || _MSC_VER >= 1930)
         [&]<size_t... Is>(std::index_sequence<Is...>) mutable {
           constexpr auto arr = get_member_names<T>();
           (func(args, arr[Is], Is), ...);
@@ -257,7 +264,7 @@ inline constexpr void for_each(T&& t, Visit&& func) {
 
 #if (defined(__GNUC__) && __GNUC__ > 10) || \
     ((defined(__clang__) || defined(_MSC_VER)) && __has_include(<concepts>))
-#if __has_include(<concetps>)
+#if __cplusplus >= 202002L
 template <ylt::reflection::FixedString s>
 inline constexpr auto operator""_ylts() {
   return s;

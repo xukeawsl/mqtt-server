@@ -10,7 +10,7 @@
 
 using namespace std::chrono_literals;
 
-using namespace cinatra;
+using namespace coro_http;
 
 #ifdef CINATRA_ENABLE_SSL
 TEST_CASE("test wss client") {
@@ -61,7 +61,7 @@ async_simple::coro::Lazy<void> test_websocket(coro_http_client &client) {
     co_return;
   }
 
-  auto result = co_await client.write_websocket("hello websocket");
+  co_await client.write_websocket("hello websocket");
   auto data = co_await client.read_websocket();
   CHECK(data.resp_body == "hello websocket");
   co_await client.write_websocket("test again");
@@ -72,6 +72,25 @@ async_simple::coro::Lazy<void> test_websocket(coro_http_client &client) {
   CHECK(data.resp_body == "ws close");
   CHECK(data.net_err == asio::error::eof);
 }
+
+#ifdef CINATRA_ENABLE_GZIP
+async_simple::coro::Lazy<void> test_gzip_websocket(coro_http_client &client) {
+  auto r = co_await client.connect("ws://localhost:8090/ws");
+  if (r.net_err) {
+    co_return;
+  }
+
+  std::string str = "hello websocket";
+  co_await client.write_websocket(str.data(), str.size());
+  auto data = co_await client.read_websocket();
+  CHECK(data.resp_body == "hello websocket");
+
+  co_await client.write_websocket_close("ws close");
+  data = co_await client.read_websocket();
+  CHECK(data.resp_body == "ws close");
+  CHECK(data.net_err == asio::error::eof);
+}
+#endif
 
 TEST_CASE("test websocket") {
   cinatra::coro_http_server server(1, 8090);
@@ -93,14 +112,91 @@ TEST_CASE("test websocket") {
           }
         }
       });
+  server.set_http_handler<cinatra::GET>(
+      "/test_client_timeout",
+      [](coro_http_request &req,
+         coro_http_response &resp) -> async_simple::coro::Lazy<void> {
+        CHECK(req.get_content_type() == content_type::websocket);
+        websocket_result result{};
+        while (true) {
+          result = co_await req.get_conn()->read_websocket();
+          if (result.ec) {
+            break;
+          }
+
+          std::this_thread::sleep_for(200ms);
+
+          auto ec = co_await req.get_conn()->write_websocket(result.data);
+          if (ec) {
+            break;
+          }
+        }
+      });
   server.async_start();
 
-  std::this_thread::sleep_for(std::chrono::milliseconds(100));
+  auto client_timeout = []() -> async_simple::coro::Lazy<void> {
+    coro_http_client client{};
+    client.set_req_timeout(50ms);
+    client.set_ws_sec_key("s//GYHa/XO7Hd2F2eOGfyA==");
+
+    auto r = co_await client.connect("ws://localhost:8090/test_client_timeout");
+    if (r.net_err) {
+      co_return;
+    }
+
+    co_await client.write_websocket("hello websocket");
+    auto data = co_await client.read_websocket();
+    CINATRA_LOG_DEBUG << data.net_err.message();
+    CHECK(data.net_err == std::errc::timed_out);
+  };
+
+  async_simple::coro::syncAwait(client_timeout());
 
   coro_http_client client{};
   client.set_ws_sec_key("s//GYHa/XO7Hd2F2eOGfyA==");
 
   async_simple::coro::syncAwait(test_websocket(client));
+
+#ifdef INJECT_FOR_HTTP_CLIENT_TEST
+  {
+    auto lazy1 = []() -> async_simple::coro::Lazy<void> {
+      coro_http_client client{};
+      co_await client.connect("ws://localhost:8090/ws");
+      std::string send_str = "test";
+      websocket ws{};
+      // msg too long
+      auto header = ws.encode_ws_header(9 * 1024 * 1024, opcode::text, true);
+      co_await client.async_write_raw(header);
+      co_await client.async_write_raw(send_str);
+      auto data = co_await client.read_websocket();
+      CHECK(data.status != 200);
+      CINATRA_LOG_DEBUG << data.resp_body;
+    };
+    async_simple::coro::syncAwait(lazy1());
+  }
+
+  {
+    auto lazy1 = []() -> async_simple::coro::Lazy<void> {
+      coro_http_client client{};
+      co_await client.connect("ws://localhost:8090/ws");
+      std::string send_str = "test";
+      websocket ws{};
+      // error frame
+      auto header = ws.encode_ws_header(send_str.size(), (opcode)15, true);
+      co_await client.async_write_raw(header);
+      co_await client.async_write_raw(send_str);
+      auto data = co_await client.read_websocket();
+      CHECK(data.status != 200);
+    };
+    async_simple::coro::syncAwait(lazy1());
+  }
+#endif
+
+#ifdef CINATRA_ENABLE_GZIP
+  coro_http_client client1{};
+  client1.set_ws_deflate(true);
+  async_simple::coro::syncAwait(test_gzip_websocket(client1));
+#endif
 
   std::this_thread::sleep_for(std::chrono::milliseconds(300));
 
@@ -181,10 +277,12 @@ TEST_CASE("test send after server stop") {
 
 TEST_CASE("test read write in different threads") {
   cinatra::coro_http_server server(1, 8090);
+  size_t count = 0;
+  std::promise<void> promise;
   server.set_http_handler<cinatra::GET>(
       "/",
-      [](coro_http_request &req,
-         coro_http_response &resp) -> async_simple::coro::Lazy<void> {
+      [&](coro_http_request &req,
+          coro_http_response &resp) -> async_simple::coro::Lazy<void> {
         CHECK(req.get_content_type() == content_type::websocket);
         websocket_result result{};
         while (true) {
@@ -192,7 +290,11 @@ TEST_CASE("test read write in different threads") {
           if (result.ec) {
             break;
           }
-
+          count++;
+          if (count == 100) {
+            promise.set_value();
+            break;
+          }
           auto ec = co_await req.get_conn()->write_websocket(result.data);
           if (ec) {
             break;
@@ -215,7 +317,7 @@ TEST_CASE("test read write in different threads") {
       CHECK(data.resp_body == send_str);
     }
   };
-  another_thread_lazy().via(coro_io::get_global_executor()).start([](auto &&) {
+  another_thread_lazy().start([](auto &&) {
   });
 
   auto lazy = [client, weak, &send_str]() -> async_simple::coro::Lazy<void> {
@@ -228,9 +330,9 @@ TEST_CASE("test read write in different threads") {
     }
   };
 
-  async_simple::coro::syncAwait(lazy());
+  async_simple::coro::syncAwait(lazy().via(&client->get_executor()));
 
-  std::this_thread::sleep_for(std::chrono::milliseconds(300));
+  promise.get_future().wait_for(std::chrono::seconds(2));
 
   server.stop();
 }
@@ -294,7 +396,7 @@ TEST_CASE("test websocket permessage defalte") {
           }
 
           if (result.type == ws_frame_type::WS_CLOSE_FRAME) {
-            std::cout << "close frame\n";
+            CINATRA_LOG_DEBUG << "close frame\n";
             break;
           }
 

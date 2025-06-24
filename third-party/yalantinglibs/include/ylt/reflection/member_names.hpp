@@ -126,7 +126,7 @@ get_member_names() {
   }
   else {
     std::array<std::string_view, Count> arr;
-#if __cplusplus >= 202002L
+#if __cplusplus >= 202002L && (!defined(_MSC_VER) || _MSC_VER >= 1930)
     constexpr auto tp = struct_to_tuple<T>();
     [&]<size_t... Is>(std::index_sequence<Is...>) mutable {
       ((arr[Is] =
@@ -299,7 +299,7 @@ inline constexpr size_t index_of(std::string_view name) {
   return arr.size();
 }
 
-#if __has_include(<concetps>)
+#if __cplusplus >= 202002L
 template <typename T, FixedString name>
 inline constexpr size_t index_of() {
   return index_of<T>(name.str());

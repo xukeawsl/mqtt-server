@@ -570,12 +570,12 @@ void http_proxy() {
   coro_http_server proxy_wrr(2, 8090);
   proxy_wrr.set_http_proxy_handler<GET, POST>(
       "/", {"127.0.0.1:9001", "127.0.0.1:9002", "127.0.0.1:9003"},
-      coro_io::load_blance_algorithm::WRR, {10, 5, 5});
+      coro_io::load_balance_algorithm::WRR, {10, 5, 5});
 
   coro_http_server proxy_rr(2, 8091);
   proxy_rr.set_http_proxy_handler<GET, POST>(
       "/", {"127.0.0.1:9001", "127.0.0.1:9002", "127.0.0.1:9003"},
-      coro_io::load_blance_algorithm::RR);
+      coro_io::load_balance_algorithm::RR);
 
   coro_http_server proxy_random(2, 8092);
   proxy_random.set_http_proxy_handler<GET, POST>(
@@ -629,8 +629,8 @@ void http_proxy() {
   assert(!resp_random.resp_body.empty());
 }
 
-void coro_load_blancer() {
-  auto ch = coro_io::create_load_blancer<int>(10000);
+void coro_channel() {
+  auto ch = coro_io::create_channel<int>(10000);
   auto ec = async_simple::coro::syncAwait(coro_io::async_send(ch, 41));
   assert(!ec);
   ec = async_simple::coro::syncAwait(coro_io::async_send(ch, 42));
@@ -649,85 +649,7 @@ void coro_load_blancer() {
   assert(val == 42);
 }
 
-enum class upload_type { send_file, chunked, multipart };
-
-void test_outbuf() {
-  coro_http_server server(1, 9000);
-  server.set_http_handler<GET, POST>(
-      "/write_chunked",
-      [](coro_http_request &req,
-         coro_http_response &resp) -> async_simple::coro::Lazy<void> {
-        resp.set_format_type(format_type::chunked);
-        bool ok;
-        if (ok = co_await resp.get_conn()->begin_chunked(); !ok) {
-          co_return;
-        }
-
-        std::vector<std::string> vec{"hello", " world", " ok"};
-
-        for (auto &str : vec) {
-          if (ok = co_await resp.get_conn()->write_chunked(str); !ok) {
-            co_return;
-          }
-        }
-
-        ok = co_await resp.get_conn()->end_chunked();
-      });
-  server.set_http_handler<GET, POST>(
-      "/normal", [](coro_http_request &req, coro_http_response &resp) {
-        resp.set_status_and_content(status_type::ok, "test");
-      });
-  server.set_http_handler<GET, POST>(
-      "/more", [](coro_http_request &req, coro_http_response &resp) {
-        resp.set_status_and_content(status_type::ok, "test more");
-      });
-
-  server.async_start();
-
-  auto lazy = [](upload_type flag) -> async_simple::coro::Lazy<void> {
-    coro_http_client client{};
-    std::string uri = "http://127.0.0.1:9000/normal";
-    std::vector<char> oubuf;
-    oubuf.resize(10);
-    req_context<> ctx{};
-    auto result = co_await client.async_request(uri, http_method::GET,
-                                                std::move(ctx), {}, oubuf);
-    std::cout << oubuf.data() << "\n";
-
-    std::string_view out_view(oubuf.data(), result.resp_body.size());
-    assert(out_view == "test");
-    assert(out_view == result.resp_body);
-
-    auto ss = std::make_shared<std::stringstream>();
-    *ss << "hello world";
-
-    if (flag == upload_type::send_file) {
-      result = co_await client.async_upload("http://127.0.0.1:9000/more"sv,
-                                            http_method::POST, ss);
-    }
-    else if (flag == upload_type::chunked) {
-      result = co_await client.async_upload_chunked(
-          "http://127.0.0.1:9000/more"sv, http_method::POST, ss);
-    }
-    else if (flag == upload_type::multipart) {
-      client.add_str_part("test_key", "test_value");
-      result =
-          co_await client.async_upload_multipart("http://127.0.0.1:9000/more");
-    }
-
-    std::cout << oubuf.data() << "\n";
-
-    std::string_view out_view1(oubuf.data(), out_view.size());
-    assert(out_view == out_view1);
-    assert(result.resp_body != out_view1);
-  };
-  async_simple::coro::syncAwait(lazy(upload_type::send_file));
-  async_simple::coro::syncAwait(lazy(upload_type::chunked));
-  async_simple::coro::syncAwait(lazy(upload_type::multipart));
-}
-
 int main() {
-  test_outbuf();
   url_queries();
   async_simple::coro::syncAwait(basic_usage());
   async_simple::coro::syncAwait(use_aspects());
@@ -739,6 +661,6 @@ int main() {
   test_gzip();
 #endif
   http_proxy();
-  coro_load_blancer();
+  coro_channel();
   return 0;
 }

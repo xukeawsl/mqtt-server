@@ -47,25 +47,40 @@ inline void to_int(int num, char *p, int &size) {
     p[--size] = c;
 }
 
+inline std::tm localtime_safe(std::time_t timer) {
+  std::tm bt{};
+#if defined(__unix__)
+  localtime_r(&timer, &bt);
+#elif defined(_MSC_VER)
+  localtime_s(&bt, &timer);
+#else
+  static std::mutex mtx;
+  std::lock_guard<std::mutex> lock(mtx);
+  bt = *std::localtime(&timer);
+#endif
+  return bt;
+}
+
 inline char *get_time_str(const auto &now) {
-  static thread_local char buf[33];
+  static thread_local char buf[36];
   static thread_local std::chrono::seconds last_sec_{};
 
   std::chrono::system_clock::duration d = now.time_since_epoch();
   std::chrono::seconds s = std::chrono::duration_cast<std::chrono::seconds>(d);
-  auto mill_sec =
-      std::chrono::duration_cast<std::chrono::milliseconds>(d - s).count();
-  int size = 23;
+  auto usec =
+      std::chrono::duration_cast<std::chrono::microseconds>(d - s).count();
+  int size = 26;
   if (last_sec_ == s) {
-    to_int<3, '.'>(mill_sec, buf, size);
+    to_int<6, '.'>(usec, buf, size);
     return buf;
   }
 
   last_sec_ = s;
   auto tm = std::chrono::system_clock::to_time_t(now);
-  auto gmt = localtime(&tm);
+  auto ltm = localtime_safe(tm);
+  std::tm *gmt = &ltm;
 
-  to_int<3, '.'>(mill_sec, buf, size);
+  to_int<6, '.'>(usec, buf, size);
   to_int<2, ':'>(gmt->tm_sec, buf, size);
   to_int<2, ':'>(gmt->tm_min, buf, size);
   to_int<2, ' '>(gmt->tm_hour, buf, size);
@@ -164,7 +179,7 @@ class appender {
 
   template <bool sync = false, bool enable_console = false>
   void write_record(record_t &record) {
-    std::lock_guard guard(get_mutex<sync>());
+    std::unique_lock guard(get_mutex<sync>());
     if constexpr (sync == true) {
       if (max_files_ > 0 && file_size_ > max_file_size_ &&
           static_cast<size_t>(-1) != file_size_) {
@@ -174,11 +189,11 @@ class appender {
 
     auto buf = get_time_str(record.get_time_point());
 
-    buf[23] = ' ';
-    memcpy(buf + 24, severity_str(record.get_severity()).data(), 8);
-    buf[32] = ' ';
+    buf[26] = ' ';
+    memcpy(buf + 27, severity_str(record.get_severity()).data(), 8);
+    buf[35] = ' ';
 
-    auto time_str = std::string_view(buf, 33);
+    auto time_str = std::string_view(buf, 36);
     auto tid_str = get_tid_buf(record.get_tid());
     auto file_str = record.get_file_str();
     auto msg = record.get_message();
@@ -189,6 +204,8 @@ class appender {
     write_file(msg);
 
     if constexpr (enable_console) {
+      guard.unlock();
+      std::unique_lock guard1(get_mutex<true>());
       add_color(record.get_severity());
       std::cout << time_str;
       clean_color(record.get_severity());
@@ -390,7 +407,7 @@ class appender {
   bool has_init_ = false;
   std::string filename_;
 
-  bool enable_console_ = false;
+  std::atomic<bool> enable_console_ = false;
   bool flush_every_time_;
   size_t file_size_ = 0;
   size_t max_file_size_ = 0;

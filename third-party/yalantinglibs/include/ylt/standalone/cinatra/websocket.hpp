@@ -118,7 +118,7 @@ class websocket {
       return ws_frame_type::WS_PING_FRAME;
     if (msg_opcode_ == 0xA)
       return ws_frame_type::WS_PONG_FRAME;
-    return ws_frame_type::WS_BINARY_FRAME;
+    return ws_frame_type::WS_ERROR_FRAME;
   }
 
   std::string_view encode_ws_header(size_t size, opcode op, bool eof,
@@ -126,11 +126,11 @@ class websocket {
                                     bool is_client = true) {
     frame_header hdr{};
     hdr.fin = eof;
-    hdr.rsv1 = 0;
+    hdr.rsv2 = 0;
     if (need_compression)
-      hdr.rsv2 = 1;
+      hdr.rsv1 = 1;
     else
-      hdr.rsv2 = 0;
+      hdr.rsv1 = 0;
     hdr.rsv3 = 0;
     hdr.opcode = static_cast<uint8_t>(op);
     hdr.mask = is_client;

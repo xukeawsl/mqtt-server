@@ -17,10 +17,11 @@
 #include <async_simple/Executor.h>
 #include <async_simple/coro/Lazy.h>
 
-#include <asio/dispatch.hpp>
 #include <asio/io_context.hpp>
+#include <asio/post.hpp>
 #include <asio/steady_timer.hpp>
 #include <atomic>
+#include <cstdint>
 #include <future>
 #include <iostream>
 #include <memory>
@@ -28,6 +29,9 @@
 #include <thread>
 #include <type_traits>
 #include <vector>
+
+#include "asio/dispatch.hpp"
+#include "async_simple/Signal.h"
 #ifdef __linux__
 #include <pthread.h>
 #include <sched.h>
@@ -51,25 +55,25 @@ class ExecutorWrapper : public async_simple::Executor {
   using context_t = std::remove_cvref_t<decltype(executor_.context())>;
 
   virtual bool schedule(Func func) override {
-    if constexpr (requires(ExecutorImpl e) { e.post(std::move(func)); }) {
-      executor_.dispatch(std::move(func));
+    asio::post(executor_, std::move(func));
+    return true;
+  }
+
+  virtual bool schedule(Func func, uint64_t hint) override {
+    if (hint >=
+        static_cast<uint64_t>(async_simple::Executor::Priority::YIELD)) {
+      asio::post(executor_, std::move(func));
     }
     else {
       asio::dispatch(executor_, std::move(func));
     }
-
     return true;
   }
 
   virtual bool checkin(Func func, void *ctx) override {
     using context_t = std::remove_cvref_t<decltype(executor_.context())>;
     auto &executor = *(context_t *)ctx;
-    if constexpr (requires(ExecutorImpl e) { e.post(std::move(func)); }) {
-      executor.post(std::move(func));
-    }
-    else {
-      asio::dispatch(executor, std::move(func));
-    }
+    asio::post(executor, std::move(func));
     return true;
   }
   virtual void *checkout() override { return &executor_.context(); }
@@ -98,6 +102,39 @@ class ExecutorWrapper : public async_simple::Executor {
     tm->async_wait([fn = std::move(func), timer = std::move(timer)](auto ec) {
       fn();
     });
+  }
+  void schedule(Func func, Duration dur, uint64_t hint,
+                async_simple::Slot *slot = nullptr) override {
+    auto timer =
+        std::make_shared<std::pair<asio::steady_timer, std::atomic<bool>>>(
+            asio::steady_timer{executor_, dur}, false);
+    if (!slot) {
+      timer->first.async_wait([fn = std::move(func), timer](const auto &ec) {
+        fn();
+      });
+    }
+    else {
+      if (!async_simple::signalHelper{async_simple::SignalType::Terminate}
+               .tryEmplace(
+                   slot, [timer](auto signalType, auto *signal) mutable {
+                     if (bool expected = false;
+                         !timer->second.compare_exchange_strong(
+                             expected, true, std::memory_order_acq_rel)) {
+                       timer->first.cancel();
+                     }
+                   })) {
+        asio::dispatch(timer->first.get_executor(), func);
+      }
+      else {
+        timer->first.async_wait([fn = std::move(func), timer](const auto &ec) {
+          fn();
+        });
+        if (bool expected = false; !timer->second.compare_exchange_strong(
+                expected, true, std::memory_order_acq_rel)) {
+          timer->first.cancel();
+        }
+      }
+    }
   }
 };
 
@@ -153,8 +190,14 @@ class io_context_pool {
         cpu_set_t cpuset;
         CPU_ZERO(&cpuset);
         CPU_SET(i, &cpuset);
+
+#ifdef __ANDROID__
+        const pid_t tid = pthread_gettid_np(threads.back()->native_handle());
+        int rc = sched_setaffinity(tid, sizeof(cpu_set_t), &cpuset);
+#else
         int rc = pthread_setaffinity_np(threads.back()->native_handle(),
                                         sizeof(cpu_set_t), &cpuset);
+#endif
         if (rc != 0) {
           std::cerr << "Error calling pthread_setaffinity_np: " << rc << "\n";
         }

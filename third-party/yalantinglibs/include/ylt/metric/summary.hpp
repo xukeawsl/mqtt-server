@@ -17,25 +17,27 @@
 namespace ylt::metric {
 #ifdef CINATRA_ENABLE_METRIC_JSON
 struct json_summary_metric_t {
-  std::map<std::string, std::string> labels;
-  std::map<double, double> quantiles;
+  std::vector<std::string_view> labels;
+  std::vector<float> quantiles_value;
   uint64_t count;
   double sum;
 };
-YLT_REFL(json_summary_metric_t, labels, quantiles, count, sum);
+YLT_REFL(json_summary_metric_t, labels, quantiles_value, count, sum);
 struct json_summary_t {
-  std::string name;
-  std::string help;
-  std::string type;
+  std::string_view name;
+  std::string_view help;
+  std::string_view type;
+  const std::vector<std::string>& labels_name;
+  const std::vector<double>& quantiles_key;
   std::vector<json_summary_metric_t> metrics;
 };
-YLT_REFL(json_summary_t, name, help, type, metrics);
+YLT_REFL(json_summary_t, name, help, type, labels_name, quantiles_key, metrics);
 #endif
 
 class summary_t : public static_metric {
  public:
   summary_t(std::string name, std::string help, std::vector<double> quantiles,
-            std::chrono::seconds max_age = std::chrono::seconds{60})
+            std::chrono::seconds max_age = std::chrono::seconds{0})
       : static_metric(MetricType::Summary, std::move(name), std::move(help)),
         quantiles_(std::move(quantiles)),
         impl_(quantiles_,
@@ -117,25 +119,16 @@ class summary_t : public static_metric {
       return;
     }
 
-    json_summary_t summary{name_, help_, std::string(metric_name())};
+    json_summary_t summary{name_, help_, metric_name(), labels_name(),
+                           quantiles_};
     json_summary_metric_t metric;
 
-    auto rates = get_rates(metric.sum, metric.count);
-    if (rates.size() != quantiles_.size()) [[unlikely]] {
-      return;
-    }
+    metric.quantiles_value = get_rates(metric.sum, metric.count);
     if (metric.count == 0 && !has_refreshed_.load(std::memory_order_relaxed)) {
       return;
     }
-    std::size_t index = 0;
-    for (auto& e : rates) {
-      metric.quantiles.emplace(quantiles_[index++], e);
-    }
-    index = 0;
-    assert(labels_value_.size() == labels_name_.size());
-    for (auto& e : labels_value_) {
-      metric.labels[labels_name_[index++]] = e;
-    }
+    metric.labels.reserve(labels_value_.size());
+    for (auto& e : labels_value_) metric.labels.emplace_back(e);
     summary.metrics.push_back(std::move(metric));
     iguana::to_json(summary, str);
   }
@@ -156,10 +149,10 @@ class basic_dynamic_summary
       dynamic_metric_impl<ylt::metric::detail::summary_impl<uint32_t>, N>;
 
  public:
-  basic_dynamic_summary(std::string name, std::string help,
-                        std::vector<double> quantiles,
-                        std::array<std::string, N> labels_name,
-                        std::chrono::seconds max_age = std::chrono::seconds{60})
+  basic_dynamic_summary(
+      std::string name, std::string help, std::vector<double> quantiles,
+      std::array<std::string, N> labels_name,
+      std::chrono::milliseconds max_age = std::chrono::seconds{60})
       : Base(MetricType::Summary, std::move(name), std::move(help),
              std::move(labels_name)),
         quantiles_(std::move(quantiles)),
@@ -169,35 +162,33 @@ class basic_dynamic_summary
   }
 
   void observe(const std::array<std::string, N>& labels_value, float value) {
-    has_refreshed_.store(true, std::memory_order_relaxed);
-    Base::try_emplace(labels_value, quantiles_, max_age_)
-        .first->value.insert(value);
+    Base::try_emplace(labels_value, quantiles_).first->value.insert(value);
   }
 
   std::vector<float> get_rates(const std::array<std::string, N>& labels_value) {
     double sum;
     uint64_t count;
-    return Base::try_emplace(labels_value, quantiles_, max_age_)
+    return Base::try_emplace(labels_value, quantiles_)
         .first->value.get_rates(sum, count);
   }
 
   std::vector<float> get_rates(const std::array<std::string, N>& labels_value,
                                uint64_t& count) {
     double sum;
-    return Base::try_emplace(labels_value, quantiles_, max_age_)
+    return Base::try_emplace(labels_value, quantiles_)
         .first->value.get_rates(sum, count);
   }
 
   std::vector<float> get_rates(const std::array<std::string, N>& labels_value,
                                double& sum) {
     uint64_t count;
-    return Base::try_emplace(labels_value, quantiles_, max_age_)
+    return Base::try_emplace(labels_value, quantiles_)
         .first->value.get_rates(sum, count);
   }
 
   std::vector<float> get_rates(const std::array<std::string, N>& labels_value,
                                double& sum, uint64_t& count) {
-    return Base::try_emplace(labels_value, quantiles_, max_age_)
+    return Base::try_emplace(labels_value, quantiles_)
         .first->value.stat(sum, count);
   }
 
@@ -238,9 +229,8 @@ class basic_dynamic_summary
     if (map.empty()) {
       return;
     }
-    json_summary_t summary{Base::name_, Base::help_, std::string {
-                             Base::metric_name()
-                           }};
+    json_summary_t summary{Base::name_, Base::help_, Base::metric_name(),
+                           Base::labels_name(), quantiles_};
     summary.metrics.reserve(map.size());
     for (size_t i = 0; i < map.size(); ++i) {
       auto& labels_value = map[i]->label;
@@ -248,25 +238,15 @@ class basic_dynamic_summary
       double sum = 0;
       uint64_t count = 0;
       auto rates = summary_value.stat(sum, count);
-      if (count == 0 && !has_refreshed_.load(std::memory_order_relaxed)) {
+      if (count == 0)
         continue;
-      }
-      if (rates.size() != quantiles_.size()) [[unlikely]] {
-        continue;
-      }
       summary.metrics.emplace_back();
       json_summary_metric_t& metric = summary.metrics.back();
       metric.count = count;
       metric.sum = sum;
-      std::size_t index = 0;
-      assert(Base::labels_name_.size() == labels_value.size());
-      for (auto& e : labels_value) {
-        metric.labels[Base::labels_name_[index++]] = e;
-      }
-      index = 0;
-      for (auto& e : rates) {
-        metric.quantiles.emplace(quantiles_[index++], e);
-      }
+      metric.quantiles_value = std::move(rates);
+      metric.labels.reserve(labels_value.size());
+      for (auto& e : labels_value) metric.labels.emplace_back(e);
     }
     iguana::to_json(summary, str);
   }
@@ -274,8 +254,7 @@ class basic_dynamic_summary
 
  private:
   std::vector<double> quantiles_;
-  std::chrono::seconds max_age_;
-  std::atomic<bool> has_refreshed_;
+  std::chrono::milliseconds max_age_;
 };
 
 using dynamic_summary_1 = basic_dynamic_summary<1>;

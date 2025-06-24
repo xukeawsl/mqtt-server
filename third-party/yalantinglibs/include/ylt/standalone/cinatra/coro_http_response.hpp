@@ -54,7 +54,7 @@ class coro_http_response {
     has_set_content_ = true;
   }
   void set_status_and_content(
-      status_type status, std::string content = "",
+      status_type status, std::string content,
       content_encoding encoding = content_encoding::none,
       std::string_view client_encoding_type = "") {
     set_status_and_content_view(status, std::move(content), encoding, false,
@@ -388,8 +388,8 @@ class coro_http_response {
   void redirect(const std::string &url, bool is_forever = false) {
     add_header("Location", url);
     is_forever == false
-        ? set_status_and_content(status_type::moved_temporarily)
-        : set_status_and_content(status_type::moved_permanently);
+        ? set_status_and_content(status_type::moved_temporarily, "")
+        : set_status_and_content(status_type::moved_permanently, "");
   }
 
  private:

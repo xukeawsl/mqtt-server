@@ -10,7 +10,7 @@
 
 [English Version](../../en/guide/what_is_yalantinglibs.md)
 
-yaLanTingLibs 是一个现代C++基础工具库的集合, 现在它包括 struct_pack, struct_json, struct_xml, struct_yaml, struct_pb, easylog, coro_rpc, coro_io, coro_http, metric 和 async_simple, 目前我们正在开发并添加更多的新功能。
+yaLanTingLibs 是一个现代C++基础工具库的集合, 现在它包括 struct_pack, struct_json, struct_xml, struct_yaml, struct_pb, easylog, coro_rpc, coro_io, coro_http, metric, reflection 和 async_simple, 目前我们正在开发并添加更多的新功能。
 
 yaLanTingLibs 的目标: 为C++开发者提供高性能，极度易用的现代C++基础工具库, 帮助用户构建高性能的现代C++应用。
 
@@ -44,6 +44,18 @@ yaLanTingLibs 的目标: 为C++开发者提供高性能，极度易用的现代C
 你也可以手动指定Cmake选项`-DENABLE_CPP_20=ON` 或 `-DENABLE_CPP_20=OFF`来控制。
 
 ## 安装&编译
+
+### 通过包管理器安装
+
+1. 下载[vcpkg](https://github.com/microsoft/vcpkg)
+2. 执行命令：`./vcpkg install yalantinglibs`
+3. 如果你使用cmake，向脚本里添加如下内容：   
+```cmake
+find_package(yalantinglibs CONFIG REQUIRED)
+target_link_libraries(main PRIVATE yalantinglibs::yalantinglibs)
+```
+
+### 手动安装
 
 Yalantinglibs 是一个head-only的库，这意味着你可以简单粗暴的直接将`./include/ylt`拷贝走。但是更推荐的做法还是用Cmake安装。
 
@@ -434,6 +446,10 @@ yalantinglibs工程自身支持如下配置项，如果你使用cmake find_packa
 
 无依赖。
 
+### reflection
+
+无依赖
+
 ## 独立子仓库
 
 coro_http 由独立子仓库实现： [cinatra](https://github.com/qicosmos/cinatra)
@@ -449,6 +465,28 @@ struct_json、struct_xml、struct_yaml 由独立子仓库实现： [iguana](http
 ```bash
 ./benchmark_client # [线程数（默认为硬件线程数）] [每线程客户端数（默认为20）] [pipeline大小(默认为1，当设为1时相当于ping-pong模式)] [主机地址（默认为127.0.0.1）] [端口号（默认为9000）] [测试数据文件夹地址（默认为"./test_data/echo_test"] [测试秒数（默认为30）] [热身秒数（默认为5）]
 ```
+## 跨语言支持
+### 如何在python 中使用coro_http_client
+参考 `yalantinglibs/src/coro_http/examples/py_example`
+
+#### 编译和运行 py_example
+- 设置 option `ENABLE_pybind11`(in `yalantinglibs/src/coro_http/examples/CMakeLists.txt`) ON 然后编译 `py_example`.
+
+- 进入到py_example目录: `yalantinglibs/src/coro_http/examples/py_example`
+
+- python3 test.py
+
+### how to use coro_rpc with golang
+参考 `yalantinglibs/src/coro_rpc/examples/basic_example/go_example`
+
+#### 编译和运行 go_example
+- 设置 option `ENABLE_go`(in `yalantinglibs/src/coro_rpc/examples/base_examples/CMakeLists.txt`) ON and then build `coro_rpc`.
+
+- 进入到go_example 目录 `yalantinglibs/src/coro_rpc/examples/base_examples/go_example`
+
+- go build test_rpc.go
+
+- ./test_rpc
 
 ## 如何生成文档
 

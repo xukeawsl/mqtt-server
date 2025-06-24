@@ -84,14 +84,14 @@ bool MqttExposer::run() {
         "/metrics", [](coro_http_request& req, coro_http_response& resp) {
             std::string mqtt_metrics_data;
             auto mqtt_static_metrics =
-                mqtt_static_metric_manager::instance().collect();
+                mqtt_static_metric_manager::instance()->collect();
 
             for (auto& m : mqtt_static_metrics) {
                 m->serialize(mqtt_metrics_data);
             }
 
             auto mqtt_dynamic_metrics =
-                mqtt_dynamic_metric_manager::instance().collect();
+                mqtt_dynamic_metric_manager::instance()->collect();
 
             for (auto& m : mqtt_dynamic_metrics) {
                 m->serialize(mqtt_metrics_data);
@@ -130,7 +130,7 @@ void MqttExposer::stop() {
 void MqttExposer::init_mqtt_active_connections_metric() {
     auto [_, m] =
         mqtt_dynamic_metric_manager::instance()
-            .create_metric_dynamic<ylt::metric::dynamic_gauge_1t>(
+            ->create_metric_dynamic<ylt::metric::dynamic_gauge_1t>(
                 s_mqtt_active_connections, "Number of active MQTT connections",
                 std::array<std::string, 1>{"protocol"});
 
@@ -149,7 +149,7 @@ void MqttExposer::init_mqtt_active_connections_metric() {
 void MqttExposer::init_mqtt_pub_topic_count_metric() {
     auto [_, m] =
         mqtt_dynamic_metric_manager::instance()
-            .create_metric_dynamic<ylt::metric::dynamic_counter_2t>(
+            ->create_metric_dynamic<ylt::metric::dynamic_counter_2t>(
                 s_mqtt_pub_topic_count, "Number of publish MQTT topics",
                 std::array<std::string, 2>{"client_id", "quality"});
 
@@ -159,7 +159,7 @@ void MqttExposer::init_mqtt_pub_topic_count_metric() {
 void MqttExposer::init_mqtt_sub_topic_count_metric() {
     auto [_, m] =
         mqtt_dynamic_metric_manager::instance()
-            .create_metric_dynamic<ylt::metric::dynamic_counter_2t>(
+            ->create_metric_dynamic<ylt::metric::dynamic_counter_2t>(
                 s_mqtt_sub_topic_count, "Number of subscribe MQTT topics",
                 std::array<std::string, 2>{"client_id", "quality"});
 
@@ -169,7 +169,7 @@ void MqttExposer::init_mqtt_sub_topic_count_metric() {
 void MqttExposer::init_mqtt_unsub_topic_count_metric() {
     auto [_, m] =
         mqtt_dynamic_metric_manager::instance()
-            .create_metric_dynamic<ylt::metric::dynamic_counter_2t>(
+            ->create_metric_dynamic<ylt::metric::dynamic_counter_2t>(
                 s_mqtt_unsub_topic_count, "Number of unsubscribe MQTT topics",
                 std::array<std::string, 2>{"client_id", "quality"});
 

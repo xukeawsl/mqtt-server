@@ -41,6 +41,24 @@ void test_inner_object() {
   iguana::from_json(obj1, str);
   assert(obj1.get_id() == 20);
   assert(obj1.get_name() == "tom");
+
+#if __cplusplus > 201703L
+#if __has_include(<span>)
+  {
+    std::vector<int> v{1, 2};
+    std::span<int> span(v.data(), v.data() + 2);
+    std::string str;
+    iguana::to_json(span, str);
+
+    std::vector<int> v1;
+    v1.resize(2);
+    std::span<int> span1(v1.data(), v1.data() + 2);
+
+    iguana::from_json(span1, str);
+    assert(v == v1);
+  }
+#endif
+#endif
 }
 
 struct person1 {
@@ -63,6 +81,7 @@ void use_smart_pointer() {
 }
 
 void test_escape_serialize() {
+#ifdef __linux__
   person p{"老\t人", 20};
   std::string ss;
   struct_json::to_json(p, ss);
@@ -70,12 +89,14 @@ void test_escape_serialize() {
   person p1;
   struct_json::from_json(p1, ss);
   assert(p1.name == p.name);
+#endif
 }
 
 struct test_optstr_reader_null {
   std::optional<std::string> name;
 };
 YLT_REFL(test_optstr_reader_null, name);
+
 void test_optional() {
   test_optstr_reader_null v;
   v.name = "name";  // optional<string> begin with 'n'
@@ -87,7 +108,25 @@ void test_optional() {
   assert(v.name == v1.name);
 }
 
+struct Foo {
+  std::vector<std::tuple<int, std::string>> i;
+};
+YLT_REFL(Foo, i);
+
 int main() {
+  Foo f;
+  f.i.emplace_back(1, "2");
+  f.i.emplace_back(3, "4");
+  std::string json_str;
+  struct_json::to_json(f, json_str);
+  std::cout << "Serialized: " << json_str << " \n";
+  assert(!json_str.empty());
+
+  Foo loaded_config;
+  struct_json::from_json(loaded_config, json_str);
+
+  assert(loaded_config.i == f.i);
+
   person p{"tom", 20};
   std::string str;
 

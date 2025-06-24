@@ -10,6 +10,10 @@
 #include <type_traits>
 #include <vector>
 
+#ifdef SUMMARY_DEBUG_STABLE_TEST
+#include "ylt/easylog.hpp"
+#endif
+
 namespace ylt::metric::detail {
 
 template <typename uint_type, std::size_t frac_bit = 6>
@@ -127,10 +131,12 @@ class summary_impl {
     template <bool inc_order>
     void stat_impl(uint64_t& count,
                    std::vector<std::pair<int16_t, uint_type>>& result, int i) {
-      auto piece = arr[i].load(std::memory_order_relaxed);
+      auto piece = arr[i].load(std::memory_order_acquire);
       if (piece) {
         if constexpr (inc_order) {
           for (int j = 0; j < piece->size(); ++j) {
+            // tsan check data race here is expected. stat dont need to be very
+            // strict. we allow old value.
             auto value = (*piece)[j].load(std::memory_order_relaxed);
             if (value) {
               result.emplace_back(get_ordered_index(i * piece_size + j), value);
@@ -331,12 +337,23 @@ class summary_impl {
       data_copy.inc();
     }
     return result;
-  }
+  };
+#ifdef SUMMARY_DEBUG_STABLE_TEST
+  static inline constexpr size_t ms_per_second = 1;
+#else
+  static inline constexpr size_t ms_per_second = 1000;
+#endif
 
-  summary_impl(std::vector<double>& rate, std::chrono::seconds refresh_time)
+  summary_impl(std::vector<double>& rate,
+               std::chrono::seconds refresh_time = std::chrono::seconds{0})
       : rate_(rate),
-        refresh_time_(refresh_time.count() * 1000 / 2),
-        tp_(std::chrono::steady_clock::now().time_since_epoch().count()){};
+        refresh_time_(refresh_time.count() * ms_per_second / 2),
+        tp_(std::chrono::steady_clock::now().time_since_epoch().count()) {
+#ifdef SUMMARY_DEBUG_STABLE_TEST
+    ELOG_WARN << "summary max_age is ms now! dont use it in production! It's "
+                 "just for test";
+#endif
+  };
 
   ~summary_impl() {
     for (auto& data : data_) {
