@@ -139,6 +139,13 @@ private:
 
     bool is_open();
 
+    inline MQTT_QUALITY get_mqtt_quality(uint8_t qos) {
+        if (qos == 0) return MQTT_QUALITY::Qos0;
+        if (qos == 1) return MQTT_QUALITY::Qos1;
+        if (qos == 2) return MQTT_QUALITY::Qos2;
+        return MQTT_QUALITY::Unknown;
+    }
+
 public:
     // 统计存在订阅项的会话, 优化消息分发的性能
     static std::unordered_set<std::string> active_sub_set;

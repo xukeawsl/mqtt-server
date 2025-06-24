@@ -38,6 +38,7 @@ enum class MQTT_QUALITY : uint8_t {
     Qos0,
     Qos1,
     Qos2,
+    Unknown
 };
 
 enum class MQTT_MSG_STATE: uint8_t {

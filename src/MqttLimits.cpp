@@ -80,12 +80,16 @@ bool MqttLimits::load_limits(const std::string& limits_file) {
     return true;
 }
 
-bool MqttLimits::check_pub_limit(const std::string& client_id) {
-    if (!enable_) return true;
+bool MqttLimits::check_pub_limit(const std::string& client_id,
+                                 std::string& limit_group) {
+    if (!enable_) {
+        limit_group = "default";
+        return true;
+    }
 
-    std::string group_name = get_group_name(client_id);
+    limit_group = get_group_name(client_id);
 
-    auto it = pub_rate_limitor_.find(group_name);
+    auto it = pub_rate_limitor_.find(limit_group);
     if (it == pub_rate_limitor_.end() || it->second == nullptr) {
         return true;
     }
@@ -93,12 +97,16 @@ bool MqttLimits::check_pub_limit(const std::string& client_id) {
     return it->second->tryConsume();
 }
 
-bool MqttLimits::check_sub_limit(const std::string& client_id) {
-    if (!enable_) return true;
+bool MqttLimits::check_sub_limit(const std::string& client_id,
+                                 std::string& limit_group) {
+    if (!enable_) {
+        limit_group = "default";
+        return true;
+    }
 
-    std::string group_name = get_group_name(client_id);
+    limit_group = get_group_name(client_id);
 
-    auto it = sub_rate_limitor_.find(group_name);
+    auto it = sub_rate_limitor_.find(limit_group);
     if (it == sub_rate_limitor_.end() || it->second == nullptr) {
         return true;
     }

@@ -8,9 +8,11 @@ MqttExposer::MqttExposer() : is_running_(false) {}
 
 // clang-format off
 const static std::string s_mqtt_active_connections      = "mqtt_active_connections";
+const static std::string s_mqtt_pub_topic_count         = "mqtt_pub_topic_count";
 const static std::string s_mqtt_sub_topic_count         = "mqtt_sub_topic_count";
 const static std::string s_mqtt_unsub_topic_count       = "mqtt_unsub_topic_count";
-const static std::string s_mqtt_pub_topic_count         = "mqtt_pub_topic_count";
+const static std::string s_mqtt_pub_topic_limit_count   = "mqtt_pub_topic_limit_count";
+const static std::string s_mqtt_sub_topic_limit_count   = "mqtt_sub_topic_limit_count";
 // clang-format on
 
 // use RVO
@@ -74,6 +76,8 @@ bool MqttExposer::run() {
     init_mqtt_pub_topic_count_metric();
     init_mqtt_sub_topic_count_metric();
     init_mqtt_unsub_topic_count_metric();
+    init_mqtt_pub_topic_limit_count_metric();
+    init_mqtt_sub_topic_limit_count_metric();
 
     http_server_ = std::make_unique<coro_http_server>(
         MqttConfig::getInstance()->exposer_thread_count(),
@@ -176,6 +180,28 @@ void MqttExposer::init_mqtt_unsub_topic_count_metric() {
     mqtt_unsub_topic_count_metric_.swap(m);
 }
 
+void MqttExposer::init_mqtt_pub_topic_limit_count_metric() {
+    auto [_, m] = mqtt_dynamic_metric_manager::instance()
+                      ->create_metric_dynamic<ylt::metric::dynamic_counter_3t>(
+                          s_mqtt_pub_topic_limit_count,
+                          "Number of subscribe MQTT limited topics",
+                          std::array<std::string, 3>{"limit_group", "client_id",
+                                                     "quality"});
+
+    mqtt_pub_topic_limit_count_metric_.swap(m);
+}
+
+void MqttExposer::init_mqtt_sub_topic_limit_count_metric() {
+    auto [_, m] = mqtt_dynamic_metric_manager::instance()
+                      ->create_metric_dynamic<ylt::metric::dynamic_counter_3t>(
+                          s_mqtt_sub_topic_limit_count,
+                          "Number of publish MQTT limited topics",
+                          std::array<std::string, 3>{"limit_group", "client_id",
+                                                     "quality"});
+
+    mqtt_sub_topic_limit_count_metric_.swap(m);
+}
+
 void MqttExposer::inc_mqtt_active_connections(MQTT_PROTOCOL protocol) {
     if (!mqtt_active_connections_metric_) {
         return;
@@ -220,4 +246,28 @@ void MqttExposer::inc_mqtt_unsub_topic_count_metric(std::string client_id,
 
     mqtt_unsub_topic_count_metric_->inc(
         {std::move(client_id), s_get_mqtt_qos_str(qos)});
+}
+
+void MqttExposer::inc_mqtt_pub_topic_limit_count_metric(std::string limit_group,
+                                                        std::string client_id,
+                                                        MQTT_QUALITY qos) {
+    if (!mqtt_pub_topic_limit_count_metric_) {
+        return;
+    }
+
+    mqtt_pub_topic_limit_count_metric_->inc({std::move(limit_group),
+                                             std::move(client_id),
+                                             s_get_mqtt_qos_str(qos)});
+}
+
+void MqttExposer::inc_mqtt_sub_topic_limit_count_metric(std::string limit_group,
+                                                        std::string client_id,
+                                                        MQTT_QUALITY qos) {
+    if (!mqtt_sub_topic_limit_count_metric_) {
+        return;
+    }
+
+    mqtt_sub_topic_limit_count_metric_->inc({std::move(limit_group),
+                                             std::move(client_id),
+                                             s_get_mqtt_qos_str(qos)});
 }

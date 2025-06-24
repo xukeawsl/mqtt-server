@@ -13,9 +13,9 @@ protected:
 public:
     bool load_limits(const std::string& limits_file);
 
-    bool check_pub_limit(const std::string& client_id);
+    bool check_pub_limit(const std::string& client_id, std::string& limit_group);
 
-    bool check_sub_limit(const std::string& client_id);
+    bool check_sub_limit(const std::string& client_id, std::string& limit_group);
 
 private:
     std::string get_group_name(const std::string& client_id);

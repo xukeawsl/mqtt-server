@@ -13,7 +13,7 @@ limit_groups:
       client_id_prefix: ['mqttx_']
     limit:
       pub_rate: 1
-      sub_rate: 50000
+      sub_rate: 1
   
   - name: 'iot-devices'
     selector:
@@ -21,6 +21,13 @@ limit_groups:
     limit:
       pub_rate: 2000
       sub_rate: 600
+
+  - name: 'bench-test'
+    selector:
+      client_id_regex: ['.*bench_.*']
+    limit:
+      pub_rate: 50
+      sub_rate: 50
 
   - name: 'auto-gen'
     selector:

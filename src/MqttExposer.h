@@ -30,6 +30,10 @@ public:
 
     void inc_mqtt_unsub_topic_count_metric(std::string client_id, MQTT_QUALITY qos);
 
+    void inc_mqtt_pub_topic_limit_count_metric(std::string limit_group, std::string client_id, MQTT_QUALITY qos);
+
+    void inc_mqtt_sub_topic_limit_count_metric(std::string limit_group, std::string client_id, MQTT_QUALITY qos);
+
 private:
     void init_mqtt_active_connections_metric();
 
@@ -38,6 +42,10 @@ private:
     void init_mqtt_sub_topic_count_metric();
 
     void init_mqtt_unsub_topic_count_metric();
+
+    void init_mqtt_pub_topic_limit_count_metric();
+
+    void init_mqtt_sub_topic_limit_count_metric();
 
 private:
     bool is_running_;
@@ -49,4 +57,6 @@ private:
     std::shared_ptr<ylt::metric::dynamic_counter_2t> mqtt_pub_topic_count_metric_;
     std::shared_ptr<ylt::metric::dynamic_counter_2t> mqtt_sub_topic_count_metric_;
     std::shared_ptr<ylt::metric::dynamic_counter_2t> mqtt_unsub_topic_count_metric_;
+    std::shared_ptr<ylt::metric::dynamic_counter_3t> mqtt_pub_topic_limit_count_metric_;
+    std::shared_ptr<ylt::metric::dynamic_counter_3t> mqtt_sub_topic_limit_count_metric_;
 };
