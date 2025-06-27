@@ -21,7 +21,7 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y cmake
         elif [[ "${{ runner.os }}" == "Windows" ]]; then
-          choco install cmake --installargs 'ADD_CMAKE_TO_PATH=System'
+          choco upgrade cmake -y --installargs 'ADD_CMAKE_TO_PATH=System'
         fi
       shell: bash
 
