@@ -1,0 +1,102 @@
+name: Build and Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  build:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, ubuntu-22.04, windows-latest, windows-2022]
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v3
+
+    - name: Install dependencies
+      run: |
+        if [[ "${{ runner.os }}" == "Linux" ]]; then
+          sudo apt-get update
+          sudo apt-get install -y cmake
+        elif [[ "${{ runner.os }}" == "Windows" ]]; then
+          choco install cmake --installargs 'ADD_CMAKE_TO_PATH=System'
+        fi
+      shell: bash
+
+    - name: Create build directory
+      run: mkdir -p build
+      shell: bash
+
+    - name: Configure CMake
+      run: cmake -DCMAKE_BUILD_TYPE=Release ..
+      working-directory: ./build
+      shell: bash
+
+    - name: Build project
+      run: cmake --build . --parallel --config Release
+      working-directory: ./build
+      shell: bash
+
+    - name: Package binaries and config
+      run: |
+        mkdir -p release/bin
+        cp ./config.yml release/
+        cp ./acl_rules.yml release/
+        cp ./limits.yml release/
+        if [[ "${{ runner.os }}" == "Windows" ]]; then
+          cp ./bin/Release/mqtt-server.exe release/bin/
+          7z a mqtt-server-${{ matrix.os }}.zip ./release/*
+        else
+          cp ./bin/mqtt-server release/bin/
+          tar -czvf mqtt-server-${{ matrix.os }}.tar.gz -C release .
+        fi
+      shell: bash
+
+    - name: Upload artifact
+      uses: actions/upload-artifact@v3
+      with:
+        name: mqtt-server-${{ matrix.os }}
+        path: |
+          mqtt-server-${{ matrix.os }}.zip
+          mqtt-server-${{ matrix.os }}.tar.gz
+
+  release:
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v3
+
+    - name: Download all artifacts
+      uses: actions/download-artifact@v3
+      with:
+        path: artifacts
+
+    - name: Create release
+      id: create_release
+      uses: actions/create-release@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        tag_name: ${{ github.ref_name }}
+        release_name: Release ${{ github.ref_name }}
+        draft: false
+        prerelease: false
+
+    - name: Upload release assets
+      run: |
+        for dir in artifacts/*; do
+          if [[ -d "$dir" ]]; then
+            file=$(find "$dir" -type f \( -name "*.zip" -o -name "*.tar.gz" \))
+            if [[ -n "$file" ]]; then
+              name=$(basename "$file")
+              echo "Uploading $name..."
+              gh release upload ${{ github.ref_name }} "$file" --clobber
+            fi
+          fi
+        done
+      shell: bash
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
