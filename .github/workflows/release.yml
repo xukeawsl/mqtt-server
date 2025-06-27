@@ -64,6 +64,9 @@ jobs:
 
   release:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      packages: write
     needs: build
     steps:
     - name: Checkout repository
