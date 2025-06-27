@@ -49,7 +49,7 @@ jobs:
           cp ./bin/Release/mqtt-server.exe release/bin/
           7z a mqtt-server-${{ matrix.os }}.zip ./release/*
         else
-          cp ./bin/mqtt-server release/bin/
+          cp ./build/mqtt-server release/bin/
           tar -czvf mqtt-server-${{ matrix.os }}.tar.gz -C release .
         fi
       shell: bash
