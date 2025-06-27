@@ -16,7 +16,9 @@
 #include "sha1.hpp"
 #include "asio.hpp"
 #include "asio/experimental/channel.hpp"
-#include "ylt/metric.hpp"
+#include "ylt/metric/counter.hpp"
+#include "ylt/metric/gauge.hpp"
+#include "ylt/metric/metric_manager.hpp"
 #include "ylt/coro_http/coro_http_server.hpp"
 
 #ifdef MQ_WITH_TLS
